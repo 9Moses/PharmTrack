@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# Django
+*/staticfiles/
+*/media/
+db.sqlite3
+
+# Environment
+.env
+*.env
+
+# Docker
+.docker/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Services (excluded from git)
+delivery-service/
+notification-service/
+email-service/
