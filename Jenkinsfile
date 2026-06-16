@@ -248,18 +248,14 @@ pipeline {
             when {
                 anyOf { branch 'main'; branch 'master' }
             }
-            steps {
-                sh """
-                    echo \$DOCKERHUB_CREDS_PSW | docker login -u \$DOCKERHUB_CREDS_USR --password-stdin
-                """
-                parallel {
-                    stage('Push Gateway') {
-                        steps {
-                            sh """
-                                docker push ${GATEWAY_IMAGE}:${IMAGE_TAG}
-                                docker push ${GATEWAY_IMAGE}:latest
-                            """
-                        }
+            parallel {
+                stage('Push Gateway') {
+                    steps {
+                        sh """
+                            echo \$DOCKERHUB_CREDS_PSW | docker login -u \$DOCKERHUB_CREDS_USR --password-stdin
+                            docker push ${GATEWAY_IMAGE}:${IMAGE_TAG}
+                            docker push ${GATEWAY_IMAGE}:latest
+                        """
                     }
                 }
             }
