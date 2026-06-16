@@ -11,7 +11,6 @@ pipeline {
 
     environment {
         // --- Shared Environment Variables ---
-        IMAGE_TAG           = "${env.GIT_COMMIT?.take(7) ?: 'dev'}-${env.BUILD_NUMBER}"
         K8S_NAMESPACE       = "pharmtrack"
 
         // --- Gateway Service Specific ---
@@ -24,7 +23,7 @@ pipeline {
         RABBITMQ_PASSWORD   = credentials('gateway-rabbitmq-password')
         DJANGO_SECRET_KEY   = credentials('gateway-secret-key')
         DOCKERHUB_CREDS     = credentials('dockerhub-credentials')
-        NOTIFY_EMAIL        = credentials('notify-email')
+        NOTIFY_EMAIL        = "esselmoses12@gmail.com"
     }
 
     stages {
@@ -446,70 +445,23 @@ pipeline {
     // ==========================================
     // POST ACTIONS
     // ==========================================
-    post {
-        always {
-            script {
-                echo "========================================="
-                echo "Pipeline completed: ${currentBuild.result}"
-                echo "========================================="
-                
-                // Cleanup Docker
+   post {
+    always {
+        script {
+            echo "========================================="
+            echo "Pipeline completed: ${currentBuild.result}"
+            echo "========================================="
+
+            // Safe Docker cleanup (no crash if workspace missing)
+            try {
                 sh """
                     docker logout 2>/dev/null || true
                     docker rmi ${env.GATEWAY_IMAGE}:${env.IMAGE_TAG} 2>/dev/null || true
                     docker rmi ${env.GATEWAY_IMAGE}:latest 2>/dev/null || true
                 """
+            } catch (e) {
+                echo "Cleanup skipped safely"
             }
-        }
-        
-        failure {
-            script {
-                // Trigger rollback if deployment failed
-                if (env.PREVIOUS_REVISION && env.PREVIOUS_REVISION != '0') {
-                    sh """
-                        export KUBECONFIG=\${KUBECONFIG_CRED}
-                        echo "⚠️  Deploy failed — rolling back to revision ${PREVIOUS_REVISION}"
-                        kubectl rollout undo deployment/gateway -n ${K8S_NAMESPACE} --to-revision=${PREVIOUS_REVISION} || true
-                        kubectl rollout status deployment/gateway -n ${K8S_NAMESPACE} --timeout=120s || true
-                    """
-                }
-            }
-            
-            // Send failure notification
-            emailext(
-                subject: "❌ Pipeline FAILED: ${env.JOB_NAME} - Build #${env.BUILD_NUMBER}",
-                body: """
-                    Pipeline failed!
-                    
-                    Job: ${env.JOB_NAME}
-                    Build: #${env.BUILD_NUMBER}
-                    Branch: ${env.DETECTED_BRANCH}
-                    Commit: ${env.GIT_COMMIT_SHORT}
-                    
-                    View details: ${env.BUILD_URL}
-                """,
-                to: "${env.NOTIFY_EMAIL}",
-                mimeType: 'text/plain'
-            )
-        }
-        
-        success {
-            emailext(
-                subject: "✅ Pipeline SUCCESS: ${env.JOB_NAME} - Build #${env.BUILD_NUMBER}",
-                body: """
-                    Pipeline completed successfully!
-                    
-                    Job: ${env.JOB_NAME}
-                    Build: #${env.BUILD_NUMBER}
-                    Branch: ${env.DETECTED_BRANCH}
-                    Commit: ${env.GIT_COMMIT_SHORT}
-                    Image: ${env.GATEWAY_IMAGE}:${env.IMAGE_TAG}
-                    
-                    View details: ${env.BUILD_URL}
-                """,
-                to: "${env.NOTIFY_EMAIL}",
-                mimeType: 'text/plain'
-            )
         }
     }
 }
