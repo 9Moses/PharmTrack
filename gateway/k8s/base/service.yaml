@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: gateway
+  namespace: pharmtrack
+  labels:
+    app: gateway
+  annotations:
+    # Tells Prometheus (via prometheus.yml scrape_configs / annotation-based
+    # discovery) to scrape this service's /metrics endpoint.
+    prometheus.io/scrape: "true"
+    prometheus.io/path: "/metrics"
+    prometheus.io/port: "8000"
+spec:
+  selector:
+    app: gateway
+  ports:
+    - port: 8000
+      targetPort: 8000
+      name: http
+  type: ClusterIP

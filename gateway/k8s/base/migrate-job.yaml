@@ -1,0 +1,25 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: gateway-migrate
+  namespace: pharmtrack
+spec:
+  backoffLimit: 2
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          image: pharmtrack/gateway:__IMAGE_TAG__
+          command: ["python", "manage.py", "migrate", "--noinput"]
+          envFrom:
+            - configMapRef:
+                name: gateway-config
+            - secretRef:
+                name: gateway-app-secret
+            - secretRef:
+                name: gateway-db-secret
+            - secretRef:
+                name: redis-secret
+            - secretRef:
+                name: rabbitmq-secret

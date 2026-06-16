@@ -1,0 +1,218 @@
+pipeline{
+    agent any
+
+    options {
+        timestamps()
+        disableConcurrentBuild()
+        buildDiscarder(logRotator(numToKeepStr: '15'))
+        timeout(time: 20, unit: 'MINUTES')
+    }
+
+    environment {
+        K8S_NAMESPACE       = "pharmtrack"
+        KUBECONFIG_CRED     = credentials('pharmtrack-kubeconfig')
+        DB_PASSWORD         = credentials('gateway-db-password')
+        REDIS_PASSWORD      = credentials('gateway-redis-password')
+        RABBITMQ_PASSWORD   = credentials('gateway-rabbitmq-password')
+        DJANGO_SECRET_KEY   = credentials('gateway-secret-key')
+        SLACK_WEBHOOK       = credentials('slack-webhook')
+        NOTIFY_EMAIL        = credentials('notify-email')
+    }
+
+    stages{
+
+        stage('Checkout'){
+            echo "Checking out code..."
+            steps {
+                checkout scm
+                echo "Applying shared infra | branch: ${env.BRANCH_NAME} | build: #${env.BUILD_NUMBER}"
+            }
+        }
+        
+        stage('Validate Manifests'){
+            steps {
+                sh """
+                    export KUBECONFIG=\$KUBECONFIG_CRED
+
+                    # Validate all infra manifests except the secrets example file
+                    # (it contains placeholder values that would fail validation)
+                    for f in k8s/infra/*.yaml; do
+                        case "\$f" in
+                            *secrets.example*) echo "Skipping \$f (template only)"; continue ;;
+                        esac
+                        echo "Validating \$f ..."
+                        kubectl apply --dry-run=client -f "\$f"
+                    done
+                """
+            }
+        }
+
+         stage('Inject Shared Secrets') {
+            steps {
+                sh """
+                    export KUBECONFIG=\$KUBECONFIG_CRED
+
+                    # Ensure namespace exists before creating secrets
+                    kubectl apply -f k8s/infra/00-namespace.yaml
+
+                    # Postgres credentials
+                    kubectl create secret generic gateway-db-secret \
+                        --from-literal=POSTGRES_USER=postgres \
+                        --from-literal=POSTGRES_PASSWORD="\$DB_PASSWORD" \
+                        -n ${K8S_NAMESPACE} \
+                        --save-config --dry-run=client -o yaml | kubectl apply -f -
+
+                    # Redis credentials
+                    kubectl create secret generic redis-secret \
+                        --from-literal=REDIS_PASSWORD="\$REDIS_PASSWORD" \
+                        -n ${K8S_NAMESPACE} \
+                        --save-config --dry-run=client -o yaml | kubectl apply -f -
+
+                    # RabbitMQ credentials
+                    kubectl create secret generic rabbitmq-secret \
+                        --from-literal=RABBITMQ_DEFAULT_USER=pharmtrack \
+                        --from-literal=RABBITMQ_DEFAULT_PASS="\$RABBITMQ_PASSWORD" \
+                        -n ${K8S_NAMESPACE} \
+                        --save-config --dry-run=client -o yaml | kubectl apply -f -
+
+                    # Django app secret (shared across services if needed)
+                    kubectl create secret generic gateway-app-secret \
+                        --from-literal=SECRET_KEY="\$DJANGO_SECRET_KEY" \
+                        -n ${K8S_NAMESPACE} \
+                        --save-config --dry-run=client -o yaml | kubectl apply -f -
+
+                    echo "✅ All secrets injected into namespace: ${K8S_NAMESPACE}"
+                """
+            }
+        }
+
+        stage('Apply Shared Infrastructure') {
+            steps {
+                sh """
+                    export KUBECONFIG=\$KUBECONFIG_CRED
+
+                    echo "--- Applying Postgres (gateway DB) ---"
+                    kubectl apply -f k8s/infra/10-postgres-gateway.yaml
+
+                    echo "--- Applying Redis ---"
+                    kubectl apply -f k8s/infra/20-redis.yaml
+
+                    echo "--- Applying RabbitMQ ---"
+                    kubectl apply -f k8s/infra/30-rabbitmq.yaml
+
+                    echo "✅ Shared infrastructure manifests applied"
+                """
+            }
+        }
+
+        stage('Wait for Readiness') {
+            steps {
+                sh """
+                    export KUBECONFIG=\$KUBECONFIG_CRED
+
+                    echo "⏳ Waiting for Postgres ..."
+                    kubectl rollout status statefulset/postgres-gateway \
+                        -n ${K8S_NAMESPACE} --timeout=180s
+
+                    echo "⏳ Waiting for Redis ..."
+                    kubectl rollout status deployment/redis \
+                        -n ${K8S_NAMESPACE} --timeout=120s
+
+                    echo "⏳ Waiting for RabbitMQ ..."
+                    kubectl rollout status statefulset/rabbitmq \
+                        -n ${K8S_NAMESPACE} --timeout=180s
+
+                    echo "✅ All shared services ready"
+                """
+            }
+        }
+
+        stage('Connectivity Checks') {
+            parallel {
+
+                stage('Check Postgres') {
+                    steps {
+                        sh """
+                            export KUBECONFIG=\$KUBECONFIG_CRED
+                            kubectl run pg-check-${env.BUILD_NUMBER} \
+                                -n ${K8S_NAMESPACE} \
+                                --rm -i --restart=Never \
+                                --image=postgres:16-alpine \
+                                --env=PGPASSWORD="\$DB_PASSWORD" \
+                                -- pg_isready \
+                                     -h postgres-gateway.${K8S_NAMESPACE}.svc.cluster.local \
+                                     -U postgres \
+                                     -d gateway_db
+                        """
+                    }
+                }
+
+                stage('Check Redis') {
+                    steps {
+                        sh """
+                            export KUBECONFIG=\$KUBECONFIG_CRED
+                            kubectl run redis-check-${env.BUILD_NUMBER} \
+                                -n ${K8S_NAMESPACE} \
+                                --rm -i --restart=Never \
+                                --image=redis:7-alpine \
+                                -- redis-cli \
+                                     -h redis.${K8S_NAMESPACE}.svc.cluster.local \
+                                     -a "\$REDIS_PASSWORD" \
+                                     ping
+                        """
+                    }
+                }
+
+                stage('Check RabbitMQ') {
+                    steps {
+                        sh """
+                            export KUBECONFIG=\$KUBECONFIG_CRED
+                            kubectl run rmq-check-${env.BUILD_NUMBER} \
+                                -n ${K8S_NAMESPACE} \
+                                --rm -i --restart=Never \
+                                --image=curlimages/curl:8.7.1 \
+                                -- curl -sf \
+                                     -u "pharmtrack:\$RABBITMQ_PASSWORD" \
+                                     http://rabbitmq.${K8S_NAMESPACE}.svc.cluster.local:15672/api/healthchecks/node
+                        """
+                    }
+                }
+            }
+        }
+
+    }
+
+    post {
+    success {
+        emailext(
+            subject: "✅ PharmTrack Shared Infra Applied Successfully",
+            body: """
+                PharmTrack Shared Infra applied successfully.
+
+                Branch: ${env.BRANCH_NAME}
+                Build: #${env.BUILD_NUMBER}
+                Namespace: ${K8S_NAMESPACE}
+
+                Build URL:
+                ${env.BUILD_URL}
+            """,
+            to: "${NOTIFY_EMAIL}"
+        )
+    }
+
+    failure {
+        emailext(
+            subject: "❌ PharmTrack Shared Infra Pipeline Failed",
+            body: """
+                PharmTrack Shared Infra pipeline FAILED.
+
+                Branch: ${env.BRANCH_NAME}
+                Build: #${env.BUILD_NUMBER}
+
+                View Build:
+                ${env.BUILD_URL}
+            """,
+            to: "${NOTIFY_EMAIL}"
+        )
+    }
+}

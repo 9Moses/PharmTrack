@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres-gateway
+  namespace: pharmtrack
+spec:
+  serviceName: postgres-gateway
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres-gateway
+  template:
+    metadata:
+      labels:
+        app: postgres-gateway
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports:
+            - containerPort: 5432
+          envFrom:
+            - secretRef:
+                name: gateway-db-secret
+          env:
+            - name: POSTGRES_DB
+              value: gateway_db
+          volumeMounts:
+            - name: pgdata
+              mountPath: /var/lib/postgresql/data
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "$(POSTGRES_USER)"]
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "$(POSTGRES_USER)"]
+            initialDelaySeconds: 15
+            periodSeconds: 20
+  volumeClaimTemplates:
+    - metadata:
+        name: pgdata
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 5Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-gateway
+  namespace: pharmtrack
+spec:
+  selector:
+    app: postgres-gateway
+  ports:
+    - port: 5432
+      targetPort: 5432
+  clusterIP: None

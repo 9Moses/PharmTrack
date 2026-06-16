@@ -1,0 +1,291 @@
+pipeline {
+    agent any
+
+    options {
+        timestamps()
+        disableConcurrentBuilds()
+        buildDiscarder(logRotator(numToKeepStr: '15'))
+        timeout(time: 30, unit: 'MINUTES')
+    }
+
+    environment {
+        SERVICE_NAME        = "pharmtrack-gateway"
+        IMAGE_NAME          = "pharmtrack/gateway"
+        IMAGE_TAG           = "${env.GIT_COMMIT[0..7]}-${env.BUILD_NUMBER}"
+        K8S_NAMESPACE       = "pharmtrack"
+
+        // Jenkins managed credentials
+        DOCKERHUB_CREDS     = credentials('dockerhub-credentials')
+        KUBECONFIG_CRED     = credentials('pharmtrack-kubeconfig')
+        DJANGO_SECRET_KEY   = credentials('gateway-secret-key')
+        DB_PASSWORD         = credentials('gateway-db-password')
+        REDIS_PASSWORD      = credentials('gateway-redis-password')
+        RABBITMQ_PASSWORD   = credentials('gateway-rabbitmq-password')
+        NOTIFY_EMAIL        = credentials('notify-email')
+    }
+
+    stages {
+
+        stage('Checkout') {
+            steps {
+                checkout scm
+                echo "Building branch: ${env.BRANCH_NAME} | commit: ${env.GIT_COMMIT[0..7]}"
+            }
+        }
+
+        stage('Build Image') {
+            steps {
+                dir('gateway') {
+                    sh """
+                        docker build \
+                            --label "git.commit=${env.GIT_COMMIT}" \
+                            --label "build.number=${env.BUILD_NUMBER}" \
+                            --label "branch=${env.BRANCH_NAME}" \
+                            -t ${IMAGE_NAME}:${IMAGE_TAG} \
+                            -t ${IMAGE_NAME}:latest \
+                            .
+                    """
+                }
+            }
+        }
+
+        stage('Code Quality') {
+            parallel {
+
+                stage('Lint — flake8') {
+                    steps {
+                        dir('gateway') {
+                            sh """
+                                docker run --rm \
+                                    -e SECRET_KEY=ci-lint-key \
+                                    -e DEBUG=True \
+                                    -e DB_PASSWORD=ci \
+                                    ${IMAGE_NAME}:${IMAGE_TAG} \
+                                    flake8 . \
+                                        --max-line-length=120 \
+                                        --exclude=migrations,__pycache__,.venv \
+                                        --format=default
+                            """
+                        }
+                    }
+                }
+
+                stage('Security — bandit') {
+                    steps {
+                        dir('gateway') {
+                            sh """
+                                docker run --rm \
+                                    -e SECRET_KEY=ci-bandit-key \
+                                    -e DEBUG=True \
+                                    -e DB_PASSWORD=ci \
+                                    ${IMAGE_NAME}:${IMAGE_TAG} \
+                                    bandit -r . \
+                                        --exclude ./.venv,./migrations \
+                                        -ll \
+                                        -f txt
+                            """
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('Tests') {
+            steps {
+                dir('gateway') {
+                    sh """
+                        docker run --rm \
+                            -e SECRET_KEY=ci-test-secret \
+                            -e DEBUG=True \
+                            -e DB_PASSWORD=ci \
+                            -e DJANGO_SETTINGS_MODULE=pharmtrack_gateway.settings \
+                            -v \$(pwd)/coverage.xml:/app/coverage.xml \
+                            ${IMAGE_NAME}:${IMAGE_TAG} \
+                            pytest tests/ \
+                                --tb=short -v \
+                                --cov=. \
+                                --cov-report=xml:/app/coverage.xml \
+                                --cov-fail-under=70
+                    """
+                }
+            }
+            post {
+                always {
+                    junit allowEmptyResults: true, testResults: 'gateway/coverage.xml'
+                }
+            }
+        }
+
+        stage('Image Scan — Trivy') {
+            steps {
+                sh """
+                    docker run --rm \
+                        -v /var/run/docker.sock:/var/run/docker.sock \
+                        -v \$(pwd)/.trivy-cache:/root/.cache/ \
+                        aquasec/trivy:latest image \
+                            --exit-code 1 \
+                            --severity HIGH,CRITICAL \
+                            --no-progress \
+                            ${IMAGE_NAME}:${IMAGE_TAG}
+                """
+            }
+        }
+
+        stage('Push Image') {
+            when {
+                anyOf { branch 'main'; branch 'master' }
+            }
+            steps {
+                sh """
+                    echo \$DOCKERHUB_CREDS_PSW | docker login -u \$DOCKERHUB_CREDS_USR --password-stdin
+                    docker push ${IMAGE_NAME}:${IMAGE_TAG}
+                    docker push ${IMAGE_NAME}:latest
+                """
+            }
+        }
+
+        stage('Inject K8s Secrets') {
+            when {
+                anyOf { branch 'main'; branch 'master' }
+            }
+            steps {
+                sh """
+                    export KUBECONFIG=\$KUBECONFIG_CRED
+
+                    kubectl create secret generic gateway-app-secret \
+                        --from-literal=SECRET_KEY="\$DJANGO_SECRET_KEY" \
+                        -n ${K8S_NAMESPACE} \
+                        --save-config --dry-run=client -o yaml | kubectl apply -f -
+
+                    kubectl create secret generic gateway-db-secret \
+                        --from-literal=POSTGRES_USER=postgres \
+                        --from-literal=POSTGRES_PASSWORD="\$DB_PASSWORD" \
+                        -n ${K8S_NAMESPACE} \
+                        --save-config --dry-run=client -o yaml | kubectl apply -f -
+
+                    kubectl create secret generic redis-secret \
+                        --from-literal=REDIS_PASSWORD="\$REDIS_PASSWORD" \
+                        -n ${K8S_NAMESPACE} \
+                        --save-config --dry-run=client -o yaml | kubectl apply -f -
+
+                    kubectl create secret generic rabbitmq-secret \
+                        --from-literal=RABBITMQ_DEFAULT_USER=pharmtrack \
+                        --from-literal=RABBITMQ_DEFAULT_PASS="\$RABBITMQ_PASSWORD" \
+                        -n ${K8S_NAMESPACE} \
+                        --save-config --dry-run=client -o yaml | kubectl apply -f -
+                """
+            }
+        }
+
+        stage('Deploy to Kubernetes') {
+            when {
+                anyOf { branch 'main'; branch 'master' }
+            }
+            steps {
+                // Capture current revision for potential rollback
+                script {
+                    env.PREVIOUS_REVISION = sh(
+                        script: """
+                            export KUBECONFIG=\$KUBECONFIG_CRED
+                            kubectl get deployment gateway -n ${K8S_NAMESPACE} \
+                                -o jsonpath='{.metadata.annotations.deployment\\.kubernetes\\.io/revision}' 2>/dev/null || echo '0'
+                        """,
+                        returnStdout: true
+                    ).trim()
+                }
+
+                dir('gateway/k8s/base') {
+                    sh """
+                        export KUBECONFIG=\$KUBECONFIG_CRED
+
+                        # Stamp the image tag into manifests (working copies only —
+                        # actual files in git keep __IMAGE_TAG__ as the placeholder)
+                        sed 's#__IMAGE_TAG__#${IMAGE_TAG}#g' deployment.yaml  > deployment.rendered.yaml
+                        sed 's#__IMAGE_TAG__#${IMAGE_TAG}#g' migrate-job.yaml > migrate-job.rendered.yaml
+
+                        # 8. Run DB migrations Job
+                        kubectl delete job gateway-migrate -n ${K8S_NAMESPACE} --ignore-not-found
+                        kubectl apply -f migrate-job.rendered.yaml
+                        kubectl wait --for=condition=complete \
+                            job/gateway-migrate \
+                            -n ${K8S_NAMESPACE} \
+                            --timeout=120s
+
+                        # 9. Apply remaining manifests and roll out
+                        kubectl apply -f configmap.yaml
+                        kubectl apply -f service.yaml
+                        kubectl apply -f ingress.yaml
+                        kubectl apply -f hpa.yaml
+                        kubectl apply -f deployment.rendered.yaml
+
+                        kubectl rollout status deployment/gateway \
+                            -n ${K8S_NAMESPACE} \
+                            --timeout=180s
+
+                        # Clean up rendered files (not part of the repo)
+                        rm -f deployment.rendered.yaml migrate-job.rendered.yaml
+                    """
+                }
+            }
+        }
+
+        stage('Smoke Test') {
+            when {
+                anyOf { branch 'main'; branch 'master' }
+            }
+            steps {
+                sh """
+                    export KUBECONFIG=\$KUBECONFIG_CRED
+                    kubectl run gateway-smoke-${env.BUILD_NUMBER} \
+                        -n ${K8S_NAMESPACE} \
+                        --rm -i \
+                        --restart=Never \
+                        --image=curlimages/curl:8.7.1 \
+                        -- curl -sf --retry 5 --retry-delay 3 \
+                             http://gateway.${K8S_NAMESPACE}.svc.cluster.local:8000/healthz/
+                """
+            }
+        }
+    }
+
+    post {
+        always {
+            sh "docker logout || true"
+            // Remove local build images to keep the Jenkins agent disk clean
+            sh "docker rmi ${IMAGE_NAME}:${IMAGE_TAG} ${IMAGE_NAME}:latest || true"
+        }
+
+        failure {
+            script {
+                // ── Rollback ──────────────────────────────────────────────
+                if (env.PREVIOUS_REVISION && env.PREVIOUS_REVISION != '0') {
+                    sh """
+                        export KUBECONFIG=\$KUBECONFIG_CRED
+                        echo "⚠️  Deploy failed — rolling back to revision ${env.PREVIOUS_REVISION}"
+                        kubectl rollout undo deployment/gateway \
+                            -n ${K8S_NAMESPACE} \
+                            --to-revision=${env.PREVIOUS_REVISION} || true
+                        kubectl rollout status deployment/gateway \
+                            -n ${K8S_NAMESPACE} \
+                            --timeout=120s || true
+                    """
+                }
+
+                // ── Email notification ────────────────────────────────────
+                emailext(
+                    subject: "Build FAILED",
+                    body: "Build ${env.BUILD_NUMBER} failed. View at: ${env.BUILD_URL}",
+                    to: "${NOTIFY_EMAIL}"
+                )
+            }
+        }
+
+        success {
+            emailext(
+                subject: "Build Success",
+                body: "Build ${env.BUILD_NUMBER} succeeded",
+                to: "${NOTIFY_EMAIL}"
+            )
+        }
+    }
+}
