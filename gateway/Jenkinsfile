@@ -21,7 +21,7 @@ pipeline {
         DB_PASSWORD         = credentials('gateway-db-password')
         REDIS_PASSWORD      = credentials('gateway-redis-password')
         RABBITMQ_PASSWORD   = credentials('gateway-rabbitmq-password')
-        NOTIFY_EMAIL        = credentials('notify-email')
+        NOTIFY_EMAIL        = 'esselmoses12@gmail.com'
     }
 
     stages {

@@ -18,9 +18,13 @@ RUN jenkins-plugin-cli --plugins docker-workflow
 RUN groupadd -f -g 999 docker \
   && usermod -aG docker jenkins
 
+RUN curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" \
+    && install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl \
+    && rm kubectl
+
 # Copy and register the runtime entrypoint
-COPY jenkins/entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+# COPY jenkins/entrypoint.sh /entrypoint.sh
+# RUN chmod +x /entrypoint.sh
 
 # Run entrypoint as root so it can fix GID, then drops to jenkins via gosu
-ENTRYPOINT ["/entrypoint.sh"]
+# ENTRYPOINT ["/entrypoint.sh"]

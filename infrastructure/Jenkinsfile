@@ -16,7 +16,7 @@ pipeline{
         RABBITMQ_PASSWORD   = credentials('gateway-rabbitmq-password')
         DJANGO_SECRET_KEY   = credentials('gateway-secret-key')
         SLACK_WEBHOOK       = credentials('slack-webhook')
-        NOTIFY_EMAIL        = credentials('notify-email')
+        NOTIFY_EMAIL        = "esselmoses12@gmail.com"
     }
 
     stages{
