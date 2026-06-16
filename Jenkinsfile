@@ -11,7 +11,7 @@ pipeline {
 
     environment {
         // --- Shared Environment Variables ---
-        IMAGE_TAG           = "${GIT_COMMIT[0..7]}-${BUILD_NUMBER}"
+        IMAGE_TAG           = "${env.GIT_COMMIT?.take(7) ?: 'dev'}-${env.BUILD_NUMBER}"
         K8S_NAMESPACE       = "pharmtrack"
 
         // --- Gateway Service Specific ---
@@ -456,8 +456,8 @@ pipeline {
                 // Cleanup Docker
                 sh """
                     docker logout 2>/dev/null || true
-                    docker rmi ${GATEWAY_IMAGE}:${IMAGE_TAG} 2>/dev/null || true
-                    docker rmi ${GATEWAY_IMAGE}:latest 2>/dev/null || true
+                    docker rmi ${env.GATEWAY_IMAGE}:${env.IMAGE_TAG} 2>/dev/null || true
+                    docker rmi ${env.GATEWAY_IMAGE}:latest 2>/dev/null || true
                 """
             }
         }
@@ -488,7 +488,7 @@ pipeline {
                     
                     View details: ${env.BUILD_URL}
                 """,
-                to: "${NOTIFY_EMAIL}",
+                to: "${env.NOTIFY_EMAIL}",
                 mimeType: 'text/plain'
             )
         }
@@ -503,11 +503,11 @@ pipeline {
                     Build: #${env.BUILD_NUMBER}
                     Branch: ${env.DETECTED_BRANCH}
                     Commit: ${env.GIT_COMMIT_SHORT}
-                    Image: ${GATEWAY_IMAGE}:${IMAGE_TAG}
+                    Image: ${env.GATEWAY_IMAGE}:${env.IMAGE_TAG}
                     
                     View details: ${env.BUILD_URL}
                 """,
-                to: "${NOTIFY_EMAIL}",
+                to: "${env.NOTIFY_EMAIL}",
                 mimeType: 'text/plain'
             )
         }
