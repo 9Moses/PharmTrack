@@ -32,6 +32,7 @@ pipeline {
         // ==========================================
         stage('Checkout') {
             steps {
+                deleteDir()
                 checkout scm
                 script {
                     // Detect branch name properly
