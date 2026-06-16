@@ -465,6 +465,7 @@ pipeline {
         }
     }
 }
+} // <-- This closes the `pipeline {` block
 
 // Helper function to check for changes in directory
 def isChangeset(String path) {
