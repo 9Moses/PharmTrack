@@ -276,6 +276,10 @@ pipeline {
                         dir('gateway') {
 
                             sh """
+                                echo "Cleaning old containers/networks..."
+                                docker rm -f ci-postgres || true
+                                docker network rm ci-net || true
+
                                 echo "Creating CI network..."
                                 docker network create ci-net || true
 
@@ -323,6 +327,14 @@ pipeline {
                         always {
                             junit allowEmptyResults: true, testResults: 'gateway/coverage.xml'
                             archiveArtifacts artifacts: 'gateway/coverage.xml', allowEmptyArchive: true
+                        }
+
+                        cleanup {
+                            sh """
+                                echo "Cleaning up CI containers..."
+                                docker rm -f ci-postgres || true
+                                docker network rm ci-net || true
+                            """
                         }
                     }
                 }
