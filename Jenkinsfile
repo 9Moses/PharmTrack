@@ -280,22 +280,27 @@ pipeline {
                                     -e DB_PASSWORD=ci \
                                     -e RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/ \
                                     -e DJANGO_SETTINGS_MODULE=pharmtrack_gateway.settings \
-                                    -v \$(pwd)/coverage.xml:/app/coverage.xml \
                                     ${GATEWAY_IMAGE}:${IMAGE_TAG} \
                                     pytest tests/ --tb=short -v --cov=. \
-                                    --cov-report=xml:/app/coverage.xml \
+                                    --cov-report=xml:/tmp/coverage.xml \
                                     --cov-fail-under=70
-                                """
-                            }
+
+                                docker create --name cov_container ${GATEWAY_IMAGE}:${IMAGE_TAG}
+                                docker cp cov_container:/tmp/coverage.xml ${WORKSPACE}/gateway/coverage.xml || true
+                                docker rm cov_container || true
+                            """
                         }
-                        post {
-                            always {
-                                junit allowEmptyResults: true, testResults: 'gateway/coverage.xml'
-                            }
+                    }
+                    post {
+                        always {
+                            junit allowEmptyResults: true, testResults: 'gateway/coverage.xml'
+                            archiveArtifacts artifacts: 'gateway/coverage.xml', allowEmptyArchive: true
                         }
                     }
                 }
             }
+        }
+
 
 
         // ─────────────────────────────────────────────────────────────────
