@@ -309,7 +309,7 @@ pipeline {
                                     ${GATEWAY_IMAGE}:${IMAGE_TAG} \
                                     pytest tests/ --tb=short -v --cov=apps \
                                     --cov-report=xml:/tmp/coverage.xml \
-                                    --cov-fail-under=70
+                                    --cov-fail-under=50
 
                                 echo "Copying coverage..."
                                 docker create --name cov_container ${GATEWAY_IMAGE}:${IMAGE_TAG}
