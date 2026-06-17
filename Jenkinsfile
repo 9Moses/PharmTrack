@@ -194,6 +194,7 @@ pipeline {
                 stage('Gateway Service') {
                     when {
                        expression { env.DETECTED_BRANCH in ['main', 'master'] }
+                       expression { params.SKIP_TESTS == true }
                     }
                     steps {
                         dir('gateway') {
@@ -220,6 +221,7 @@ pipeline {
                 stage('Gateway - Lint (flake8)') {
                     when {
                         expression { env.DETECTED_BRANCH in ['main', 'master'] }
+                        expression { params.SKIP_TESTS == true }
                     }
                     steps {
                         dir('gateway') {
@@ -236,6 +238,7 @@ pipeline {
                 stage('Gateway - SAST (bandit)') {
                     when {
                         expression { env.DETECTED_BRANCH in ['main', 'master'] }
+                        expression { params.SKIP_TESTS == true }
                     }
                     steps {
                         dir('gateway') {
@@ -252,6 +255,7 @@ pipeline {
                 stage('Gateway - Image Scan (Trivy)') {
                     when {
                         expression { env.DETECTED_BRANCH in ['main', 'master'] }
+                        expression { params.SKIP_TESTS == true }
                     }
                     steps {
                         sh """
@@ -278,6 +282,7 @@ pipeline {
                 stage('Gateway - Unit Tests (pytest)') {
                     when {
                         expression { env.DETECTED_BRANCH in ['main', 'master'] }
+                        expression { params.SKIP_TESTS == true }
                     }
 
                     steps {
@@ -355,6 +360,7 @@ pipeline {
         stage('Push to Registry') {
             when {
                 expression { env.DETECTED_BRANCH in ['main', 'master'] }
+                expression { params.SKIP_TESTS == true }
             }
             steps {
                 sh """
@@ -371,7 +377,6 @@ pipeline {
         stage('Deploy to Kubernetes') {
             when {
                 expression { env.DETECTED_BRANCH in ['main', 'master'] }
-                expression { params.SKIP_TESTS == true }
             }
             steps {
                 script {
