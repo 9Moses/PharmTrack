@@ -271,13 +271,35 @@ pipeline {
                     when {
                         expression { env.DETECTED_BRANCH in ['main', 'master'] }
                     }
+
                     steps {
                         dir('gateway') {
+
                             sh """
+                                echo "Creating CI network..."
+                                docker network create ci-net || true
+
+                                echo "Starting PostgreSQL..."
+                                docker run -d --name ci-postgres \
+                                --network ci-net \
+                                -e POSTGRES_DB=ci_db \
+                                -e POSTGRES_USER=ci_user \
+                                -e POSTGRES_PASSWORD=ci_pass \
+                                postgres:15
+
+                                echo "Waiting for DB to be ready..."
+                                sleep 10
+
+                                echo "Running Django tests..."
                                 docker run --rm \
+                                    --network ci-net \
                                     -e SECRET_KEY=ci-test-secret \
                                     -e DEBUG=True \
-                                    -e DB_PASSWORD=ci \
+                                    -e DB_NAME=ci_db \
+                                    -e DB_USER=ci_user \
+                                    -e DB_PASSWORD=ci_pass \
+                                    -e DB_HOST=ci-postgres \
+                                    -e DB_PORT=5432 \
                                     -e RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/ \
                                     -e DJANGO_SETTINGS_MODULE=pharmtrack_gateway.settings \
                                     ${GATEWAY_IMAGE}:${IMAGE_TAG} \
@@ -285,12 +307,18 @@ pipeline {
                                     --cov-report=xml:/tmp/coverage.xml \
                                     --cov-fail-under=70
 
+                                echo "Copying coverage..."
                                 docker create --name cov_container ${GATEWAY_IMAGE}:${IMAGE_TAG}
                                 docker cp cov_container:/tmp/coverage.xml ${WORKSPACE}/gateway/coverage.xml || true
                                 docker rm cov_container || true
+
+                                echo "Cleaning up..."
+                                docker rm -f ci-postgres || true
+                                docker network rm ci-net || true
                             """
                         }
                     }
+
                     post {
                         always {
                             junit allowEmptyResults: true, testResults: 'gateway/coverage.xml'
@@ -300,8 +328,6 @@ pipeline {
                 }
             }
         }
-
-
 
         // ─────────────────────────────────────────────────────────────────
         // 6. Push to Registry
