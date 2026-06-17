@@ -148,6 +148,16 @@ pipeline {
                             kubectl create secret generic gateway-app-secret \
                                 --from-literal=SECRET_KEY="${DJANGO_SECRET_KEY}" \
                                 -n ${K8S_NAMESPACE} --dry-run=client -o yaml | kubectl apply -f -
+
+                            # ── DockerHub image-pull secret ──────────────────────────────────────
+                            # Without this, kubelet pulls anonymously → DockerHub rate-limit
+                            # (100 pulls / 6 hr per IP) causes image pulls to hang or fail.
+                            # DOCKERHUB_CREDS is the same Jenkins credential used in Push stage.
+                            kubectl create secret docker-registry regcred \
+                                --docker-server=https://index.docker.io/v1/ \
+                                --docker-username="${DOCKERHUB_CREDS_USR}" \
+                                --docker-password="${DOCKERHUB_CREDS_PSW}" \
+                                -n ${K8S_NAMESPACE} --dry-run=client -o yaml | kubectl apply -f -
                         '''
                     }
                 }

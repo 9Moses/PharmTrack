@@ -49,5 +49,3 @@ spec:
                 name: redis-secret
             - secretRef:
                 name: rabbitmq-secret
-      imagePullSecrets:
-        - name: regcred
