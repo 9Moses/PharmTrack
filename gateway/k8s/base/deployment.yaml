@@ -22,7 +22,7 @@ spec:
     spec:
       containers:
         - name: gateway
-          image: pharmtrack/gateway:__IMAGE_TAG__
+          image: 9moses/gateway:__IMAGE_TAG__
           ports:
             - containerPort: 8000
           envFrom:

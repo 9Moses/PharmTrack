@@ -10,7 +10,7 @@ pipeline {
 
     environment {
         SERVICE_NAME        = "pharmtrack-gateway"
-        IMAGE_NAME          = "pharmtrack/gateway"
+        IMAGE_NAME          = "9moses/gateway"
         IMAGE_TAG           = "${env.GIT_COMMIT[0..7]}-${env.BUILD_NUMBER}"
         K8S_NAMESPACE       = "pharmtrack"
 

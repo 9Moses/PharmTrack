@@ -10,7 +10,7 @@ spec:
       restartPolicy: Never
       containers:
         - name: migrate
-          image: pharmtrack/gateway:__IMAGE_TAG__
+          image: 9moses/gateway:__IMAGE_TAG__
           command: ["python", "manage.py", "migrate", "--noinput"]
           envFrom:
             - configMapRef:
