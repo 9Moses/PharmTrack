@@ -4,7 +4,8 @@ metadata:
   name: gateway-migrate
   namespace: pharmtrack
 spec:
-  backoffLimit: 2
+  backoffLimit: 3
+  activeDeadlineSeconds: 600
   template:
     spec:
       restartPolicy: Never
@@ -12,6 +13,13 @@ spec:
         - name: migrate
           image: 9moses/gateway:__IMAGE_TAG__
           command: ["python", "manage.py", "migrate", "--noinput"]
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "512Mi"
+            limits:
+              cpu: "1"
+              memory: "1Gi"
           envFrom:
             - configMapRef:
                 name: gateway-config
@@ -23,3 +31,5 @@ spec:
                 name: redis-secret
             - secretRef:
                 name: rabbitmq-secret
+      imagePullSecrets:
+        - name: regcred

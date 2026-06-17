@@ -378,26 +378,49 @@ pipeline {
                 }
 
                 dir('gateway/k8s/base') {
-                    sh """
-                        export KUBECONFIG=\${KUBECONFIG_CRED}
+                    sh '''
+                        export KUBECONFIG=${KUBECONFIG_CRED}
 
-                        sed 's#__IMAGE_TAG__#${IMAGE_TAG}#g' deployment.yaml  > deployment.rendered.yaml
-                        sed 's#__IMAGE_TAG__#${IMAGE_TAG}#g' migrate-job.yaml > migrate-job.rendered.yaml
+                        # Render templates
+                        sed "s#__IMAGE_TAG__#${IMAGE_TAG}#g" deployment.yaml > deployment.rendered.yaml
+                        sed "s#__IMAGE_TAG__#${IMAGE_TAG}#g" migrate-job.yaml > migrate-job.rendered.yaml
 
+                        echo "=== Cleaning up old migration job ==="
                         kubectl delete job gateway-migrate -n ${K8S_NAMESPACE} --ignore-not-found
-                        kubectl apply -f migrate-job.rendered.yaml
-                        kubectl wait --for=condition=complete job/gateway-migrate -n ${K8S_NAMESPACE} --timeout=120s
 
+                        echo "=== Applying migration job ==="
+                        kubectl apply -f migrate-job.rendered.yaml
+
+                        echo "=== Waiting for migration to complete (max 8 minutes) ==="
+                        if ! kubectl wait --for=condition=complete job/gateway-migrate -n ${K8S_NAMESPACE} --timeout=480s; then
+                            echo "❌ Migration FAILED or TIMED OUT!"
+                            echo "=== Job Description ==="
+                            kubectl describe job gateway-migrate -n ${K8S_NAMESPACE}
+                            echo "=== Pod Logs ==="
+                            kubectl logs -n ${K8S_NAMESPACE} -l job-name=gateway-migrate --tail=500 || true
+                            echo "=== Pod Description ==="
+                            kubectl describe pod -n ${K8S_NAMESPACE} -l job-name=gateway-migrate || true
+                            exit 1
+                        fi
+
+                        echo "✅ Migration completed successfully!"
+
+                        # Apply other resources
+                        echo "=== Applying ConfigMap, Service, Ingress, HPA ==="
                         kubectl apply -f configmap.yaml
                         kubectl apply -f service.yaml
                         kubectl apply -f ingress.yaml
                         kubectl apply -f hpa.yaml
+
+                        echo "=== Deploying new application version ==="
                         kubectl apply -f deployment.rendered.yaml
 
+                        echo "=== Waiting for deployment rollout ==="
                         kubectl rollout status deployment/gateway -n ${K8S_NAMESPACE} --timeout=180s
 
-                        rm -f deployment.rendered.yaml migrate-job.rendered.yaml
-                    """
+                        # Cleanup
+                        rm -f *.rendered.yaml
+                    '''
                 }
             }
         }
