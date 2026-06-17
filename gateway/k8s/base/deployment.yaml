@@ -71,8 +71,6 @@ spec:
                 secretKeyRef:
                   name: gateway-db-secret
                   key: POSTGRES_USER
-            - name: DB_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: gateway-db-secret
-                  key: POSTGRES_PASSWORD
+            # Compose the full AMQP URL from rabbitmq-secret vars (loaded via envFrom).
+            - name: RABBITMQ_URL
+              value: "amqp://$(RABBITMQ_DEFAULT_USER):$(RABBITMQ_DEFAULT_PASS)@rabbitmq.pharmtrack.svc.cluster.local:5672/pharmtrack"

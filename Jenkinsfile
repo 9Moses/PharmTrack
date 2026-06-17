@@ -367,18 +367,18 @@ pipeline {
             steps {
                 script {
                     env.PREVIOUS_REVISION = sh(
-                        script: '''
+                        script: """
                             export KUBECONFIG=${KUBECONFIG_CRED}
                             kubectl get deployment gateway -n ${K8S_NAMESPACE} \
                                 -o jsonpath='{.metadata.annotations.deployment\\.kubernetes\\.io/revision}' 2>/dev/null || echo '0'
-                        ''',
+                        """,
                         returnStdout: true
                     ).trim()
                     echo "Previous revision: ${env.PREVIOUS_REVISION}"
                 }
 
                 dir('gateway/k8s/base') {
-                    sh '''
+                    sh """
                         set -e  # Exit immediately if any command fails
                         export KUBECONFIG=${KUBECONFIG_CRED}
 
@@ -431,7 +431,7 @@ pipeline {
 
                         # Cleanup
                         rm -f *.rendered.yaml
-                    '''
+                    """
                 }
             }
         }

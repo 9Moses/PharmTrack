@@ -186,7 +186,7 @@ RATE_LIMIT_OTP_LOCKOUT_SECONDS: int = config(
 )
 
 # RabbitMQ
-RABBITMQ_URL = config("RABBITMQ_URL")
+RABBITMQ_URL = config("RABBITMQ_URL", default="amqp://guest:guest@localhost:5672/")
 
 # API Docs
 SPECTACULAR_SETTINGS = {

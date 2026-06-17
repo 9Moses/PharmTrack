@@ -27,6 +27,10 @@ spec:
                 secretKeyRef:
                   name: gateway-db-secret
                   key: POSTGRES_USER
+            # Build the full AMQP URL from the rabbitmq-secret vars (injected via envFrom below).
+            # Kubernetes expands $(VAR) in env entries after all envFrom sources are loaded.
+            - name: RABBITMQ_URL
+              value: "amqp://$(RABBITMQ_DEFAULT_USER):$(RABBITMQ_DEFAULT_PASS)@rabbitmq.pharmtrack.svc.cluster.local:5672/pharmtrack"
           resources:
             requests:
               cpu: "100m"
