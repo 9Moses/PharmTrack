@@ -25,7 +25,13 @@ pipeline{
             echo "Checking out code..."
             steps {
                 checkout scm
-                echo "Applying shared infra | branch: ${env.BRANCH_NAME} | build: #${env.BUILD_NUMBER}"
+                script {
+                    env.DETECTED_BRANCH = env.BRANCH_NAME ?: sh(
+                        script: 'git rev-parse --abbrev-ref HEAD',
+                        returnStdout: true
+                    ).trim()
+                }
+                echo "Branch: ${env.DETECTED_BRANCH} | Build: #${env.BUILD_NUMBER}"
             }
         }
         
@@ -189,7 +195,7 @@ pipeline{
             body: """
                 PharmTrack Shared Infra applied successfully.
 
-                Branch: ${env.BRANCH_NAME}
+                Branch: ${env.DETECTED_BRANCH}
                 Build: #${env.BUILD_NUMBER}
                 Namespace: ${K8S_NAMESPACE}
 
@@ -206,7 +212,7 @@ pipeline{
             body: """
                 PharmTrack Shared Infra pipeline FAILED.
 
-                Branch: ${env.BRANCH_NAME}
+                Branch: ${env.DETECTED_BRANCH}
                 Build: #${env.BUILD_NUMBER}
 
                 View Build:

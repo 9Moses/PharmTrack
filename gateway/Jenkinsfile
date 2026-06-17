@@ -29,7 +29,13 @@ pipeline {
         stage('Checkout') {
             steps {
                 checkout scm
-                echo "Building branch: ${env.BRANCH_NAME} | commit: ${env.GIT_COMMIT[0..7]}"
+                script {
+                    env.DETECTED_BRANCH = env.BRANCH_NAME ?: sh(
+                        script: 'git rev-parse --abbrev-ref HEAD',
+                        returnStdout: true
+                    ).trim()
+                }
+                echo "Building branch: ${env.DETECTED_BRANCH} | commit: ${env.GIT_COMMIT[0..7]}"
             }
         }
 
@@ -40,7 +46,7 @@ pipeline {
                         docker build \
                             --label "git.commit=${env.GIT_COMMIT}" \
                             --label "build.number=${env.BUILD_NUMBER}" \
-                            --label "branch=${env.BRANCH_NAME}" \
+                            --label "branch=${env.DETECTED_BRANCH}" \
                             -t ${IMAGE_NAME}:${IMAGE_TAG} \
                             -t ${IMAGE_NAME}:latest \
                             .
@@ -133,7 +139,7 @@ pipeline {
 
         stage('Push Image') {
             when {
-                anyOf { branch 'main'; branch 'master' }
+                expression { env.DETECTED_BRANCH in ['main', 'master'] }
             }
             steps {
                 sh """
@@ -146,7 +152,7 @@ pipeline {
 
         stage('Inject K8s Secrets') {
             when {
-                anyOf { branch 'main'; branch 'master' }
+                expression { env.DETECTED_BRANCH in ['main', 'master'] }
             }
             steps {
                 sh """
@@ -179,7 +185,7 @@ pipeline {
 
         stage('Deploy to Kubernetes') {
             when {
-                anyOf { branch 'main'; branch 'master' }
+                expression { env.DETECTED_BRANCH in ['main', 'master'] }
             }
             steps {
                 // Capture current revision for potential rollback
@@ -231,7 +237,7 @@ pipeline {
 
         stage('Smoke Test') {
             when {
-                anyOf { branch 'main'; branch 'master' }
+                expression { env.DETECTED_BRANCH in ['main', 'master'] }
             }
             steps {
                 sh """

@@ -105,11 +105,7 @@ pipeline {
         // ─────────────────────────────────────────────────────────────────
         stage('Infrastructure') {
             when {
-                anyOf {
-                    branch 'main'
-                    branch 'master'
-                    changeset 'k8s/infra/**'
-                }
+                expression { env.DETECTED_BRANCH in ['main', 'master'] }
             }
             stages {
                 stage('Validate Manifests') {
@@ -189,11 +185,7 @@ pipeline {
             parallel {
                 stage('Gateway Service') {
                     when {
-                        anyOf {
-                            branch 'main'
-                            branch 'master'
-                            changeset 'gateway/**'
-                        }
+                       expression { env.DETECTED_BRANCH in ['main', 'master'] }
                     }
                     steps {
                         dir('gateway') {
@@ -219,7 +211,7 @@ pipeline {
             parallel {
                 stage('Gateway - Lint (flake8)') {
                     when {
-                        anyOf { branch 'main'; branch 'master'; changeset 'gateway/**' }
+                        expression { env.DETECTED_BRANCH in ['main', 'master'] }
                     }
                     steps {
                         dir('gateway') {
@@ -235,7 +227,7 @@ pipeline {
 
                 stage('Gateway - SAST (bandit)') {
                     when {
-                        anyOf { branch 'main'; branch 'master'; changeset 'gateway/**' }
+                        expression { env.DETECTED_BRANCH in ['main', 'master'] }
                     }
                     steps {
                         dir('gateway') {
@@ -251,7 +243,7 @@ pipeline {
 
                 stage('Gateway - Image Scan (Trivy)') {
                     when {
-                        anyOf { branch 'main'; branch 'master'; changeset 'gateway/**' }
+                        expression { env.DETECTED_BRANCH in ['main', 'master'] }
                     }
                     steps {
                         sh """
@@ -275,7 +267,7 @@ pipeline {
             parallel {
                 stage('Gateway - Unit Tests (pytest)') {
                     when {
-                        anyOf { branch 'main'; branch 'master'; changeset 'gateway/**' }
+                        expression { env.DETECTED_BRANCH in ['main', 'master'] }
                     }
                     steps {
                         dir('gateway') {
@@ -304,7 +296,7 @@ pipeline {
         // ─────────────────────────────────────────────────────────────────
         stage('Push to Registry') {
             when {
-                anyOf { branch 'main'; branch 'master' }
+                expression { env.DETECTED_BRANCH in ['main', 'master'] }
             }
             steps {
                 sh """
@@ -320,7 +312,7 @@ pipeline {
         // ─────────────────────────────────────────────────────────────────
         stage('Deploy to Kubernetes') {
             when {
-                anyOf { branch 'main'; branch 'master' }
+                expression { env.DETECTED_BRANCH in ['main', 'master'] }
             }
             steps {
                 script {
@@ -365,7 +357,7 @@ pipeline {
         // ─────────────────────────────────────────────────────────────────
         stage('Smoke Test') {
             when {
-                anyOf { branch 'main'; branch 'master' }
+                expression { env.DETECTED_BRANCH in ['main', 'master'] }
             }
             steps {
                 sh """

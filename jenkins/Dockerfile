@@ -19,7 +19,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gnupg \
     lsb-release \
     apt-transport-https \
-    software-properties-common \
     unzip \
     git \
     python3 \
@@ -63,14 +62,16 @@ RUN curl -fsSLO "https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/t
     && terraform -version
 
 # ── AWS CLI v2 (used by `aws eks update-kubeconfig` in Ansible) ─────────────
-RUN curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o awscliv2.zip \
-    && unzip -q awscliv2.zip \
-    && ./aws/install \
-    && rm -rf awscliv2.zip aws \
-    && aws --version
+# RUN curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o awscliv2.zip \
+#     && unzip -q awscliv2.zip \
+#     && ./aws/install \
+#     && rm -rf awscliv2.zip aws \
+#     && aws --version
 
 # ── Ansible (controller runs playbooks locally — see infrastructure/ansible) ─
-RUN pip3 install --no-cache-dir --break-system-packages ansible==9.4.0
+RUN pip3 install --no-cache-dir --break-system-packages \
+        --timeout 120 --retries 10 --resume-retries 5 \
+        ansible==9.4.0
 
 # ── Jenkins plugins ───────────────────────────────────────────────────────
 # docker-workflow:        docker.image()/docker.build() pipeline steps
@@ -90,8 +91,15 @@ RUN jenkins-plugin-cli --plugins \
     "ws-cleanup"
 
 # ── Docker group so the jenkins user can use the CLI against dind ──────────
-RUN groupadd -f -g 999 docker \
-    && usermod -aG docker jenkins
+# GID 999 may already be taken on some base image variants — fall back to
+# whatever GID the 'docker' group already has, or let the system pick one.
+RUN if getent group docker >/dev/null; then \
+        usermod -aG docker jenkins; \
+    elif getent group 999 >/dev/null; then \
+        groupadd docker && usermod -aG docker jenkins; \
+    else \
+        groupadd -g 999 docker && usermod -aG docker jenkins; \
+    fi
 
 # ── Pre-create the kubeconfig mount point used by pipelines ────────────────
 RUN mkdir -p /var/jenkins_home/.kube && chown -R jenkins:jenkins /var/jenkins_home/.kube
