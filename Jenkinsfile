@@ -150,13 +150,15 @@ pipeline {
                                 -n ${K8S_NAMESPACE} --dry-run=client -o yaml | kubectl apply -f -
 
                             # ── DockerHub image-pull secret ──────────────────────────────────────
-                            # Without this, kubelet pulls anonymously → DockerHub rate-limit
-                            # (100 pulls / 6 hr per IP) causes image pulls to hang or fail.
-                            # DOCKERHUB_CREDS is the same Jenkins credential used in Push stage.
-                            kubectl create secret docker-registry regcred \
-                                --docker-server=https://index.docker.io/v1/ \
-                                --docker-username="${DOCKERHUB_CREDS_USR}" \
-                                --docker-password="${DOCKERHUB_CREDS_PSW}" \
+                            # Use docker login → config.json method instead of --docker-password.
+                            # Reason: --docker-password triggers a raw OAuth token fetch by the
+                            # kubelet which fails with EOF when credentials contain special chars
+                            # or when PATs are used. docker login handles the full auth handshake
+                            # and stores the properly-encoded token in config.json.
+                            echo "${DOCKERHUB_CREDS_PSW}" | docker login -u "${DOCKERHUB_CREDS_USR}" --password-stdin
+                            kubectl create secret generic regcred \
+                                --from-file=.dockerconfigjson="${HOME}/.docker/config.json" \
+                                --type=kubernetes.io/dockerconfigjson \
                                 -n ${K8S_NAMESPACE} --dry-run=client -o yaml | kubectl apply -f -
                         '''
                     }
