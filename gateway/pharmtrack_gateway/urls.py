@@ -1,12 +1,12 @@
 from django.contrib import admin
 from django.urls import path, include
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView, SpectacularRedocView
-from . import healthz
+from . import health
 
 urlpatterns = [
     path("admin/", admin.site.urls),
 
-    path("healthz/", healthz, name="healthz"),
+    path("healthz/", health.healthz, name="healthz"),
 
     # Auth & user management
     path("auth/", include("apps.authentication.urls")),
