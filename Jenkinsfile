@@ -307,7 +307,7 @@ pipeline {
                                     -e RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/ \
                                     -e DJANGO_SETTINGS_MODULE=pharmtrack_gateway.settings \
                                     ${GATEWAY_IMAGE}:${IMAGE_TAG} \
-                                    pytest tests/ --tb=short -v --cov=. \
+                                    pytest tests/ --tb=short -v --cov=apps \
                                     --cov-report=xml:/tmp/coverage.xml \
                                     --cov-fail-under=70
 
