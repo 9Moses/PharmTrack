@@ -17,6 +17,14 @@
 pipeline {
     agent any
 
+    parameters {
+        booleanParam(
+            name: 'SKIP_TESTS',
+            defaultValue: false,
+            description: 'Skip all test stages and go directly to Deploy'
+        )
+    }
+
     options {
         timestamps()
         disableConcurrentBuilds()
@@ -363,6 +371,7 @@ pipeline {
         stage('Deploy to Kubernetes') {
             when {
                 expression { env.DETECTED_BRANCH in ['main', 'master'] }
+                expression { params.SKIP_TESTS == true }
             }
             steps {
                 script {
@@ -379,7 +388,23 @@ pipeline {
 
                 dir('gateway/k8s/base') {
                     sh '''
+                        set -e  # Exit immediately if any command fails
                         export KUBECONFIG=${KUBECONFIG_CRED}
+
+                        echo "=== Applying base configurations first ==="
+                        kubectl apply -f configmap.yaml
+
+                        # Optional: Apply other static resources early
+                        kubectl apply -f service.yaml
+                        kubectl apply -f ingress.yaml
+                        kubectl apply -f hpa.yaml
+
+                        echo "=== Verifying ConfigMap exists ==="
+                        if ! kubectl get configmap gateway-config -n ${K8S_NAMESPACE} >/dev/null 2>&1; then
+                            echo "❌ ERROR: gateway-config ConfigMap was not created successfully!"
+                            exit 1
+                        fi
+                        echo "✅ ConfigMap verified"
 
                         # Render templates
                         sed "s#__IMAGE_TAG__#${IMAGE_TAG}#g" deployment.yaml > deployment.rendered.yaml
@@ -405,18 +430,13 @@ pipeline {
 
                         echo "✅ Migration completed successfully!"
 
-                        # Apply other resources
-                        echo "=== Applying ConfigMap, Service, Ingress, HPA ==="
-                        kubectl apply -f configmap.yaml
-                        kubectl apply -f service.yaml
-                        kubectl apply -f ingress.yaml
-                        kubectl apply -f hpa.yaml
-
                         echo "=== Deploying new application version ==="
                         kubectl apply -f deployment.rendered.yaml
 
                         echo "=== Waiting for deployment rollout ==="
                         kubectl rollout status deployment/gateway -n ${K8S_NAMESPACE} --timeout=180s
+
+                        echo "🎉 Deployment completed successfully!"
 
                         # Cleanup
                         rm -f *.rendered.yaml
