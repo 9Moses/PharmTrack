@@ -5,12 +5,14 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
 class ErrorHandler:
     """
     Centralized safe error handler for API responses
     """
     @staticmethod
-    def handle(exc, content_message="Request failed", error_code="internal_error"):
+    def handle(exc, content_message="Request failed",
+               error_code="internal_error"):
         logger.exception("%s: %s", content_message, exc)
 
         return Response({
@@ -18,7 +20,7 @@ class ErrorHandler:
             "message": content_message,
             "error_code": error_code
         },
-        status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 def custom_exception_handler(exc, context):
