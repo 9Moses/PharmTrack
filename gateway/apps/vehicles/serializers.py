@@ -1,9 +1,6 @@
 from rest_framework import serializers
 from .models import Vehicle, Driver, Customer
 
-from rest_framework import serializers
-from .models import Vehicle, Driver, Customer
-
 class VehicleSerializer(serializers.ModelSerializer):
     registrationNumber = serializers.CharField(source='registration_number')
     isActive = serializers.BooleanField(source='is_active')

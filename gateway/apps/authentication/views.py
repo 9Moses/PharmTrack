@@ -72,6 +72,7 @@ class RequestOTPView(APIView):
                 "userType": user.role,
             })
         except User.DoesNotExist as exec:
+            logger.error("User not found: %s", exec)
             return Response({
                 "success": False,
                 "message": "User not found",
@@ -150,6 +151,7 @@ class VerifyOTPView(APIView):
                 "user": UserSerializer(user).data,
             })
         except User.DoesNotExist as exec:
+            logger.error("User not found: %s", exec)
             return Response({
                 "success": False,
                 "message": "User not found",

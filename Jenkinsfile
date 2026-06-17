@@ -251,10 +251,12 @@ pipeline {
                                 -v /var/run/docker.sock:/var/run/docker.sock \
                                 -v \$(pwd)/.trivy-cache:/root/.cache/ \
                                 aquasec/trivy:latest image \
-                                    --severity HIGH,CRITICAL \
+                                    --severity CRITICAL \
+                                    --ignore-unfixed \
+                                    --exit-code 1 \
                                     --no-progress \
                                     ${GATEWAY_IMAGE}:${IMAGE_TAG}
-                        """
+                            """
                     }
                 }
             }

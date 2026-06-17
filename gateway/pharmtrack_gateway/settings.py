@@ -1,9 +1,3 @@
-"""
-Gateway Service — Django Settings
-Handles: Auth (OTP/JWT), Users, Medicines, Vehicles, Audit
-Publishes events to RabbitMQ consumed by downstream services.
-"""
-import os
 from pathlib import Path
 from datetime import timedelta
 from decouple import config
