@@ -9,10 +9,24 @@ spec:
   template:
     spec:
       restartPolicy: Never
+      imagePullSecrets:
+        - name: regcred
       containers:
         - name: migrate
           image: 9moses/gateway:__IMAGE_TAG__
+          imagePullPolicy: Always
           command: ["python", "manage.py", "migrate", "--noinput"]
+          env:
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: gateway-db-secret
+                  key: POSTGRES_PASSWORD
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: gateway-db-secret
+                  key: POSTGRES_USER
           resources:
             requests:
               cpu: "100m"

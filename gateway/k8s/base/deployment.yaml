@@ -20,9 +20,12 @@ spec:
       labels:
         app: gateway
     spec:
+      imagePullSecrets:
+        - name: regcred
       containers:
         - name: gateway
           image: 9moses/gateway:__IMAGE_TAG__
+          imagePullPolicy: Always
           ports:
             - containerPort: 8000
           envFrom:
@@ -57,3 +60,19 @@ spec:
             limits:
               cpu: "500m"
               memory: "512Mi"
+          env:
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: gateway-db-secret
+                  key: POSTGRES_PASSWORD
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: gateway-db-secret
+                  key: POSTGRES_USER
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: gateway-db-secret
+                  key: POSTGRES_PASSWORD

@@ -212,7 +212,6 @@ pipeline {
                 stage('Gateway - Lint (flake8)') {
                     when {
                         expression { env.DETECTED_BRANCH in ['main', 'master'] }
-
                     }
                     steps {
                         dir('gateway') {
@@ -229,7 +228,6 @@ pipeline {
                 stage('Gateway - SAST (bandit)') {
                     when {
                         expression { env.DETECTED_BRANCH in ['main', 'master'] }
-
                     }
                     steps {
                         dir('gateway') {
@@ -246,7 +244,6 @@ pipeline {
                 stage('Gateway - Image Scan (Trivy)') {
                     when {
                         expression { env.DETECTED_BRANCH in ['main', 'master'] }
-
                     }
                     steps {
                         sh """
@@ -273,7 +270,6 @@ pipeline {
                 stage('Gateway - Unit Tests (pytest)') {
                     when {
                         expression { env.DETECTED_BRANCH in ['main', 'master'] }
-
                     }
 
                     steps {
@@ -351,7 +347,6 @@ pipeline {
         stage('Push to Registry') {
             when {
                 expression { env.DETECTED_BRANCH in ['main', 'master'] }
-
             }
             steps {
                 sh """
