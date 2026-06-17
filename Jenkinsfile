@@ -27,7 +27,7 @@ pipeline {
 
     environment {
         K8S_NAMESPACE       = "pharmtrack"
-        GATEWAY_IMAGE       = "pharmtrack/gateway"
+        GATEWAY_IMAGE       = "9moses/gateway"
 
         KUBECONFIG_CRED     = credentials('pharmtrack-kubeconfig')
         DB_PASSWORD         = credentials('gateway-db-password')
