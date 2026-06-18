@@ -5,6 +5,7 @@ services:
       dockerfile: Dockerfile
 
     container_name: pharmtrack_gateway
+    command: gunicorn pharmtrack_gateway.wsgi:application --bind 0.0.0.0:8000 --reload
 
     env_file:
       - .env

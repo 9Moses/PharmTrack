@@ -45,8 +45,7 @@ class MedicineListCreateView(APIView):
             return Response(MedicineSerializer(medicine).data,
                             status=status.HTTP_201_CREATED)
         except Exception as exc:
-            return ErrorHandler.custom_exception_handler(
-                exc, {"message": "Failed to send OTP"})
+            return ErrorHandler.handle(exc, "Failed to create medicine")
 
 
 class MedicineDetailView(APIView):
@@ -312,5 +311,4 @@ class MedicineBulkUploadView(APIView):
             )
 
         except Exception as exc:
-            return ErrorHandler.custom_exception_handler(
-                exc, {"message": "Bulk upload failed"})
+            return ErrorHandler.handle(exc, "Bulk upload failed")

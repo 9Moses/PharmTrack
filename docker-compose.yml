@@ -106,6 +106,7 @@ services:
       context: ./gateway
       dockerfile: Dockerfile
     container_name: pharmtrack_gateway
+    command: gunicorn pharmtrack_gateway.wsgi:application --bind 0.0.0.0:8000 --reload
     env_file: ./gateway/.env
     ports:
       - "8000:8000"

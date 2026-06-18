@@ -44,9 +44,8 @@ class RequestOTPView(APIView):
             if not email:
                 return Response({"message": "Email is required"}, status=status.HTTP_400_BAD_REQUEST)
 
-            try:
-                user = User.objects.filter(email__iexact=email).first()
-            except User.DoesNotExist:
+            user = User.objects.filter(email__iexact=email).first()
+            if not user:
                 return Response({"message": "Email not registered"}, status=status.HTTP_404_NOT_FOUND)
 
             if not user.is_active:
@@ -71,15 +70,8 @@ class RequestOTPView(APIView):
                 "message": "OTP sent successfully",
                 "userType": user.role,
             })
-        except User.DoesNotExist as exec:
-            logger.error("User not found: %s", exec)
-            return Response({
-                "success": False,
-                "message": "User not found",
-                "error_code": "user_not_found"
-            }, status=status.HTTP_404_NOT_FOUND)
         except Exception as exc:
-            return ErrorHandler.custom_exception_handler(exc, {"message": "Failed to send OTP"})
+            return ErrorHandler.handle(exc, "Failed to send OTP")
 
 
 class VerifyOTPView(APIView):
@@ -108,9 +100,8 @@ class VerifyOTPView(APIView):
                 record_otp_failure(client_ip)  # increment brute-force counter
                 return Response({"message": "Invalid or expired OTP"}, status=status.HTTP_400_BAD_REQUEST)
 
-            try:
-                user = User.objects.filter(email__iexact=email).first()
-            except User.DoesNotExist:
+            user = User.objects.filter(email__iexact=email).first()
+            if not user:
                 return Response({"message": "User not found"}, status=status.HTTP_404_NOT_FOUND)
 
             if user.role not in ("admin", "superadmin"):
@@ -149,13 +140,6 @@ class VerifyOTPView(APIView):
                 "token": str(refresh.access_token),
                 "refresh": str(refresh),
                 "user": UserSerializer(user).data,
-            })
-        except User.DoesNotExist as exec:
-            logger.error("User not found: %s", exec)
-            return Response({
-                "success": False,
-                "message": "User not found",
-                "error_code": "user_not_found"
             })
         except Exception as exc:
             return ErrorHandler.handle(exc, "Invalid OTP")
