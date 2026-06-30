@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"/><title>Delivery Cancelled — {{ app_name }}</title></head>
+<body style="margin:0;padding:0;background:#f4f6f9;font-family:Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f6f9;padding:40px 0;">
+    <tr><td align="center">
+      <table width="560" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.08);">
+        <tr><td style="background:#dc2626;padding:28px 40px;">
+          <h1 style="margin:0;color:#fff;font-size:22px;">{{ app_name }}</h1>
+          <p style="margin:4px 0 0;color:#fecaca;font-size:13px;">Delivery Cancelled</p>
+        </td></tr>
+        <tr><td style="padding:36px 40px;">
+          <h2 style="margin:0 0 12px;color:#1e293b;">Hi {{ customer_name }},</h2>
+          <p style="color:#475569;font-size:15px;line-height:1.6;margin:0 0 20px;">
+            We regret to inform you that your delivery has been cancelled.
+          </p>
+          {% if cancellation_reason %}
+          <div style="background:#fef2f2;border-left:4px solid #dc2626;padding:14px 18px;border-radius:4px;margin:0 0 20px;">
+            <strong style="color:#991b1b;">Reason:</strong>
+            <p style="margin:6px 0 0;color:#7f1d1d;">{{ cancellation_reason }}</p>
+          </div>
+          {% endif %}
+          <p style="color:#94a3b8;font-size:13px;">Delivery ID: <code>{{ delivery_id }}</code></p>
+          <p style="color:#475569;font-size:14px;">Please contact support if you have any questions.</p>
+        </td></tr>
+        <tr><td style="background:#f8fafc;padding:20px 40px;border-top:1px solid #e2e8f0;">
+          <p style="margin:0;color:#94a3b8;font-size:12px;">© {{ app_name }}</p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>

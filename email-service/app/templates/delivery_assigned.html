@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Delivery Assigned — PharmTrack</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background:#f4f6f9; margin:0; padding:0; }
+    .wrapper { max-width:600px; margin:40px auto; background:#fff; border-radius:8px; overflow:hidden; box-shadow:0 2px 8px rgba(0,0,0,.08); }
+    .header  { background:#059669; padding:32px 40px; }
+    .header h1 { color:#fff; margin:0; font-size:22px; }
+    .body    { padding:36px 40px; color:#374151; }
+    table    { width:100%; border-collapse:collapse; margin:20px 0; }
+    th,td    { padding:10px 14px; border:1px solid #e5e7eb; text-align:left; font-size:14px; }
+    th       { background:#f9fafb; color:#6b7280; font-weight:600; }
+    .badge   { display:inline-block; background:#d1fae5; color:#065f46; padding:4px 12px; border-radius:20px; font-size:13px; font-weight:600; }
+    .qr-section { text-align:center; margin:28px 0; }
+    .qr-section img { max-width:180px; border:1px solid #e5e7eb; border-radius:8px; }
+    .footer  { background:#f9fafb; padding:20px 40px; text-align:center; font-size:12px; color:#9ca3af; }
+  </style>
+</head>
+<body>
+  <div class="wrapper">
+    <div class="header"><h1>📦 New Delivery Assigned</h1></div>
+    <div class="body">
+      <p>Hello <strong>{{ customer_name }}</strong>,</p>
+      <p>A new pharmaceutical delivery has been assigned and is on its way to you.</p>
+      <table>
+        <tr><th>Delivery ID</th><td><code>{{ delivery_id }}</code></td></tr>
+        <tr><th>From</th><td>{{ from_location }}</td></tr>
+        <tr><th>Destination</th><td>{{ destination }}</td></tr>
+        <tr><th>Driver</th><td>{{ driver_name }}</td></tr>
+        <tr><th>Total Amount</th><td>GHS {{ total_amount }}</td></tr>
+        <tr><th>Status</th><td><span class="badge">Pending</span></td></tr>
+      </table>
+      {% if qr_code %}
+      <div class="qr-section">
+        <p><strong>Delivery QR Code</strong><br/>Show this at point of delivery for verification.</p>
+        <img src="{{ qr_code }}" alt="Delivery QR Code" />
+      </div>
+      {% endif %}
+    </div>
+    <div class="footer">© {{ year }} PharmTrack · Pharmaceutical Delivery Tracking</div>
+  </div>
+</body>
+</html>

@@ -30,4 +30,3 @@ Thumbs.db
 # Services (excluded from git)
 delivery-service/
 notification-service/
-email-service/

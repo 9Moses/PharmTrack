@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Your Login OTP — {{ app_name }}</title>
+</head>
+<body style="margin:0;padding:0;background:#f4f6f9;font-family:Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f6f9;padding:40px 0;">
+    <tr><td align="center">
+      <table width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.08);">
+        <!-- Header -->
+        <tr><td style="background:#1d4ed8;padding:28px 40px;">
+          <h1 style="margin:0;color:#fff;font-size:22px;font-weight:700;">{{ app_name }}</h1>
+          <p style="margin:4px 0 0;color:#bfdbfe;font-size:13px;">Pharmaceutical Delivery Tracking</p>
+        </td></tr>
+        <!-- Body -->
+        <tr><td style="padding:36px 40px;">
+          <h2 style="margin:0 0 12px;color:#1e293b;font-size:18px;">Hi {{ name }},</h2>
+          <p style="color:#475569;font-size:15px;line-height:1.6;margin:0 0 24px;">
+            Use the one-time code below to sign in to your account. This code expires in <strong>5 minutes</strong>.
+          </p>
+          <!-- OTP box -->
+          <div style="text-align:center;margin:0 0 28px;">
+            <span style="display:inline-block;background:#eff6ff;border:2px dashed #3b82f6;border-radius:8px;padding:18px 40px;font-size:36px;font-weight:800;letter-spacing:10px;color:#1d4ed8;">{{ otp }}</span>
+          </div>
+          <p style="color:#94a3b8;font-size:13px;line-height:1.6;margin:0;">
+            If you didn't request this, please ignore this email or contact support immediately.<br/>
+            Do <strong>not</strong> share this code with anyone.
+          </p>
+        </td></tr>
+        <!-- Footer -->
+        <tr><td style="background:#f8fafc;padding:20px 40px;border-top:1px solid #e2e8f0;">
+          <p style="margin:0;color:#94a3b8;font-size:12px;">© {{ app_name }} · All rights reserved</p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>
