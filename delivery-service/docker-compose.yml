@@ -1,0 +1,47 @@
+version: "3.9"
+
+services:
+  delivery-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    container_name: pharmtrack_delivery
+
+    env_file:
+      - .env
+
+    ports:
+      - "8001:8001"
+
+    volumes:
+      - .:/app
+
+    networks:
+      - pharmtrack_net
+
+    restart: unless-stopped
+
+  delivery-consumer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    container_name: pharmtrack_delivery_consumer
+
+    env_file:
+      - .env
+
+    command: python manage.py run_consumer
+
+    volumes:
+      - .:/app
+
+    networks:
+      - pharmtrack_net
+
+    restart: unless-stopped
+
+networks:
+  pharmtrack_net:
+    external: true
