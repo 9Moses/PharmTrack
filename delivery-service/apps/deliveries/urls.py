@@ -1,7 +1,7 @@
 from django.urls import path
 from .views import (
     AssignDeliveryView, DeliveryListView, DeliveryDetailView,
-    UpdateDeliveryStatusView, ScanQRView,
+    UpdateDeliveryStatusView, ScanQRView, CustomerScanConfirmView,
 )
 
 urlpatterns = [
@@ -10,4 +10,5 @@ urlpatterns = [
     path("scan/", ScanQRView.as_view(), name="delivery-scan"),
     path("<uuid:pk>/", DeliveryDetailView.as_view(), name="delivery-detail"),
     path("<uuid:pk>/status/", UpdateDeliveryStatusView.as_view(), name="delivery-status"),
+    path("<uuid:pk>/confirm/", CustomerScanConfirmView.as_view(), name="delivery-confirm"),
 ]

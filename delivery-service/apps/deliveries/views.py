@@ -1,10 +1,11 @@
 """
 Delivery Service Views
 Handles the full delivery lifecycle and publishes RabbitMQ events:
-  delivery.assigned     → notification-service, email-service
-  delivery.status_changed → notification-service
-  delivery.completed    → notification-service, email-service
-  delivery.cancelled    → notification-service
+  delivery.assigned          → notification-service, email-service
+  delivery.status_changed    → notification-service
+  delivery.completed         → notification-service, email-service
+  delivery.cancelled         → notification-service
+  delivery.customer_confirmed → notification-service
 """
 import qrcode
 import cloudinary.uploader
@@ -320,3 +321,57 @@ class ScanQRView(generics.GenericAPIView):
             return Response({"message": "QR verified", "delivery": DeliverySerializer(delivery).data})
         except Exception as exc:
             return Response({"message": f"Invalid QR: {exc}"}, status=status.HTTP_400_BAD_REQUEST)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Customer Scan & Confirm
+# ─────────────────────────────────────────────────────────────────────────────
+
+class CustomerScanConfirmView(generics.GenericAPIView):
+    """POST /deliveries/<pk>/confirm/ — Customer confirms receipt of delivery."""
+    permission_classes = [AllowAny]
+
+    @extend_schema(
+        operation_id="deliveries_customer_confirm",
+        summary="Customer confirms delivery receipt",
+        responses={
+            200: DeliverySerializer,
+            400: OpenApiResponse(description="Delivery cannot be confirmed (wrong status or already confirmed)"),
+            404: OpenApiResponse(description="Delivery not found"),
+        },
+    )
+    def post(self, request, *args, **kwargs):
+        try:
+            delivery = Delivery.objects.get(pk=kwargs["pk"])
+        except Delivery.DoesNotExist:
+            return Response({"message": "Delivery not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        if delivery.customer_confirmed:
+            return Response(
+                {"message": "Delivery has already been confirmed by the customer."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if delivery.status != Delivery.Status.IN_TRANSIT:
+            return Response(
+                {"message": f"Cannot confirm delivery in '{delivery.status}' status. Delivery must be in_transit."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        delivery.customer_confirmed = True
+        delivery.status = Delivery.Status.DELIVERED
+        delivery.delivery_time = timezone.now()
+        delivery.save(update_fields=["customer_confirmed", "status", "delivery_time"])
+
+        publish_delivery_event("delivery.customer_confirmed", {
+            "event": "delivery.customer_confirmed",
+            "delivery_id": str(delivery.id),
+            "customer_name": delivery.customer_name,
+            "customer_email": delivery.customer_email,
+            "driver_name": delivery.driver_name,
+            "destination": delivery.destination,
+            "user_id": str(delivery.user_id),
+        })
+
+        logger.info("[CustomerScanConfirmView] Delivery %s confirmed by customer %s", delivery.id, delivery.customer_name)
+        return Response(DeliverySerializer(delivery).data, status=status.HTTP_200_OK)

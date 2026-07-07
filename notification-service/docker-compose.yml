@@ -1,0 +1,47 @@
+version: "3.9"
+
+services:
+  notification-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    container_name: pharmtrack_notification
+
+    env_file:
+      - .env
+
+    ports:
+      - "8002:8002"
+
+    volumes:
+      - .:/app
+
+    networks:
+      - pharmtrack_net
+
+    restart: unless-stopped
+
+  notification-consumer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    container_name: pharmtrack_notification_consumer
+
+    env_file:
+      - .env
+
+    command: python manage.py run_consumer
+
+    volumes:
+      - .:/app
+
+    networks:
+      - pharmtrack_net
+
+    restart: unless-stopped
+
+networks:
+  pharmtrack_net:
+    external: true
