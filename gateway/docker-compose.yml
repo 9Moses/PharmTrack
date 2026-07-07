@@ -21,6 +21,22 @@ services:
 
     restart: unless-stopped
 
+  gateway-delivery-consumer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: pharmtrack_gateway_delivery_consumer
+    command: python manage.py run_delivery_consumer
+    env_file:
+      - .env
+    volumes:
+      - .:/app
+    networks:
+      - pharmtrack_net
+    restart: unless-stopped
+    depends_on:
+      - gateway
+
 networks:
   pharmtrack_net:
     external: true

@@ -127,41 +127,51 @@ def on_message(ch, method, properties, body):
 def start_consumer():
     """
     Blocking consumer — called in a background thread from FastAPI lifespan.
+    Will retry connecting to RabbitMQ continuously if it fails.
     """
+    import time
+    from pika.exceptions import AMQPConnectionError
+    
     params = pika.URLParameters(settings.rabbitmq_url)
     params.heartbeat = 600
     params.blocked_connection_timeout = 300
 
-    connection = pika.BlockingConnection(params)
-    channel = connection.channel()
+    while True:
+        try:
+            logger.info("[Email Consumer] Attempting to connect to RabbitMQ...")
+            connection = pika.BlockingConnection(params)
+            channel = connection.channel()
 
-    # ── Declare exchanges ──
-    channel.exchange_declare(exchange="pharmtrack.auth", exchange_type="fanout", durable=True)
-    channel.exchange_declare(exchange="pharmtrack.delivery", exchange_type="topic", durable=True)
+            # ── Declare exchanges ──
+            channel.exchange_declare(exchange="pharmtrack.auth", exchange_type="fanout", durable=True)
+            channel.exchange_declare(exchange="pharmtrack.delivery", exchange_type="topic", durable=True)
 
-    # ── Auth queue (OTP) ──
-    channel.queue_declare(queue="email.auth.events", durable=True)
-    channel.queue_bind(exchange="pharmtrack.auth", queue="email.auth.events")
+            # ── Auth queue (OTP) ──
+            channel.queue_declare(queue="email.auth.events", durable=True)
+            channel.queue_bind(exchange="pharmtrack.auth", queue="email.auth.events")
 
-    # ── Delivery queue ──
-    channel.queue_declare(queue="email.delivery.events", durable=True)
-    for key in ["delivery.assigned", "delivery.completed", "delivery.cancelled"]:
-        channel.queue_bind(
-            exchange="pharmtrack.delivery",
-            queue="email.delivery.events",
-            routing_key=key,
-        )
+            # ── Delivery queue ──
+            channel.queue_declare(queue="email.delivery.events", durable=True)
+            for key in ["delivery.assigned", "delivery.completed", "delivery.cancelled"]:
+                channel.queue_bind(
+                    exchange="pharmtrack.delivery",
+                    queue="email.delivery.events",
+                    routing_key=key,
+                )
 
-    channel.basic_qos(prefetch_count=1)
-    channel.basic_consume(queue="email.auth.events", on_message_callback=on_message)
-    channel.basic_consume(queue="email.delivery.events", on_message_callback=on_message)
+            channel.basic_qos(prefetch_count=1)
+            channel.basic_consume(queue="email.auth.events", on_message_callback=on_message)
+            channel.basic_consume(queue="email.delivery.events", on_message_callback=on_message)
 
-    logger.info("[Email Consumer] Waiting for events...")
-    try:
-        channel.start_consuming()
-    except Exception as exc:
-        logger.error("[Email Consumer] Consumer crashed: %s", exc)
-        connection.close()
+            logger.info("[Email Consumer] Waiting for events...")
+            channel.start_consuming()
+
+        except AMQPConnectionError as exc:
+            logger.error("[Email Consumer] Connection failed, retrying in 5s: %s", exc)
+            time.sleep(5)
+        except Exception as exc:
+            logger.error("[Email Consumer] Consumer crashed, retrying in 5s: %s", exc)
+            time.sleep(5)
 
 
 def start_consumer_thread() -> threading.Thread:

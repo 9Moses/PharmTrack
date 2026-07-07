@@ -30,6 +30,7 @@ from .serializers import (
 )
 from events.publisher import publish_delivery_event
 from utils.qr_crypto import encrypt_qr_data, decrypt_qr_data
+from utils.stock_client import validate_and_fetch_stock, InsufficientStockError, StockClientError
 
 import logging
 logger = logging.getLogger(__name__)
@@ -144,20 +145,26 @@ class AssignDeliveryView(generics.CreateAPIView):
         data = serializer.validated_data
 
         medications = data["medications"]
-        total = Decimal("0")
-        items_data = []
 
-        for med in medications:
-            qty = int(med.get("quantity", 1))
-            price = Decimal(str(med.get("unit_price", "0")))
-            total += price * qty
-            items_data.append({
-                "medicine_id": med["medicine_id"],
-                "medicine_name": med.get("medicine_name", ""),
-                "quantity": qty,
-                "unit_price": price,
-            })
+        # ── Step 1: Synchronous stock validation against gateway ──────────
+        # Extracts real medicine names, prices from gateway and validates qty.
+        auth_token = request.META.get("HTTP_AUTHORIZATION", "").replace("Bearer ", "")
+        try:
+            items_data = validate_and_fetch_stock(medications, auth_token)
+        except InsufficientStockError as exc:
+            logger.warning("[AssignDeliveryView] Stock validation failed: %s", exc)
+            return Response({"message": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except StockClientError as exc:
+            logger.error("[AssignDeliveryView] Stock client error: %s", exc)
+            return Response({"message": str(exc)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
 
+        # Compute total from validated (real) prices
+        total = sum(
+            Decimal(str(item["unit_price"])) * int(item["quantity"])
+            for item in items_data
+        )
+
+        # ── Step 2: Create delivery + items + QR atomically ───────────────
         try:
             with transaction.atomic():
                 delivery = Delivery.objects.create(
@@ -174,7 +181,13 @@ class AssignDeliveryView(generics.CreateAPIView):
                 )
 
                 for item in items_data:
-                    DeliveryItem.objects.create(delivery=delivery, **item)
+                    DeliveryItem.objects.create(
+                        delivery=delivery,
+                        medicine_id=item["medicine_id"],
+                        medicine_name=item["medicine_name"],
+                        quantity=item["quantity"],
+                        unit_price=Decimal(str(item["unit_price"])),
+                    )
 
                 # Generate encrypted QR code
                 qr_payload = {
@@ -199,7 +212,8 @@ class AssignDeliveryView(generics.CreateAPIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
-        # Publish event — notification-service & email-service will consume
+        # ── Step 3: Publish event (gateway consumer will deduct stock) ────
+        # items_data contains medicine_id + quantity so gateway can deduct.
         publish_delivery_event("delivery.assigned", {
             "event": "delivery.assigned",
             "delivery_id": str(delivery.id),
@@ -263,6 +277,15 @@ class UpdateDeliveryStatusView(generics.UpdateAPIView):
             "delivery.status_changed"
         )
 
+        # Build items snapshot for stock restoration on cancellation
+        items_snapshot = [
+            {
+                "medicine_id": str(item.medicine_id),
+                "quantity": item.quantity,
+            }
+            for item in delivery.items.all()
+        ] if new_status == Delivery.Status.CANCELLED else []
+
         publish_delivery_event(routing_key, {
             "event": routing_key,
             "delivery_id": str(delivery.id),
@@ -274,6 +297,7 @@ class UpdateDeliveryStatusView(generics.UpdateAPIView):
             "destination": delivery.destination,
             "user_id": str(delivery.user_id),
             "cancellation_reason": delivery.cancellation_reason or "",
+            "items": items_snapshot,  # populated only on cancellation
         })
 
         return Response(DeliverySerializer(delivery).data)

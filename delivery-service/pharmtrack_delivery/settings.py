@@ -115,6 +115,7 @@ DEFAULT_FILE_STORAGE = "cloudinary_storage.storage.MediaCloudinaryStorage"
 
 QR_SECRET_KEY = config("QR_SECRET_KEY", default="default-qr-secret")
 RABBITMQ_URL = config("RABBITMQ_URL")
+GATEWAY_INTERNAL_URL = config("GATEWAY_INTERNAL_URL", default="http://gateway:8000")
 
 SPECTACULAR_SETTINGS = {
     "TITLE": "PharmTrack Delivery Service API",

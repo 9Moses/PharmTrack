@@ -62,11 +62,12 @@
 ```
 otp.requested          → email-service (sends OTP email)
 user.logged_in         → notification-service (creates login notification)
-delivery.assigned      → notification-service + email-service
+delivery.assigned      → notification-service + email-service + gateway (stock deduction)
 delivery.scanned       → notification-service
+delivery.customer_confirmed → notification-service
 delivery.status_changed→ notification-service
 delivery.completed     → notification-service + email-service
-delivery.cancelled     → notification-service + email-service
+delivery.cancelled     → notification-service + email-service + gateway (stock restoration)
 medicine.created       → delivery-service (syncs catalog)
 ```
 
@@ -172,7 +173,8 @@ DELETE /medicines/<id>/   Delete medicine
 ```
 GET  /deliveries/                  List deliveries
 POST /deliveries/assign/           Assign new delivery
-POST /deliveries/scan/             Scan QR code
+POST /deliveries/scan/             Scan QR code (Driver)
+POST /deliveries/<id>/confirm/     Confirm delivery (Customer)
 GET  /deliveries/<id>/             Get delivery detail
 PATCH /deliveries/<id>/status/     Update delivery status
 ```
@@ -211,11 +213,13 @@ POST /send      Manual email trigger (internal/testing)
 ### Delivery Assigned Flow
 ```
 1. Admin → POST /deliveries/assign/  (delivery-service, Bearer JWT)
-2. delivery-service creates Delivery + DeliveryItems in Postgres
-3. Generates encrypted QR code, uploads to Cloudinary
-4. Publishes delivery.assigned → pharmtrack.delivery
-5. notification-service consumes → creates in-app notification
-6. email-service consumes → sends assignment email to customer
+2. delivery-service synchronously checks stock via HTTP GET to gateway-service
+3. delivery-service creates Delivery + DeliveryItems in Postgres
+4. Generates encrypted QR code, uploads to Cloudinary
+5. Publishes delivery.assigned → pharmtrack.delivery
+6. gateway-service consumes → atomically deducts medicine stock
+7. notification-service consumes → creates in-app notification
+8. email-service consumes → sends assignment email to customer
 ```
 
 ### Delivery Completed Flow
@@ -228,11 +232,26 @@ POST /send      Manual email trigger (internal/testing)
 6. email-service → sends completion email to customer
 ```
 
+### Delivery Cancelled Flow
+```
+1. Admin → PATCH /deliveries/<id>/status/ { "status": "cancelled" }
+2. delivery.cancelled event published (with items snapshot)
+3. gateway-service consumes → atomically restores medicine stock
+4. notification-service → creates "Delivery Cancelled" notification
+5. email-service → sends cancellation email to customer
+```
+
+### Delivery Customer Confirmed Flow
+```
+1. Customer scans QR → POST /deliveries/<id>/confirm/ (delivery-service)
+2. Status updated to delivered, delivery.customer_confirmed event published
+3. notification-service consumes → creates "Customer Confirmed" notification
+
 ---
 
 ## Security
 
-- **JWT (HS256)**: Issued by gateway, validated by all downstream services using a shared signing key.
+- **JWT (HS256)**: Issued by gateway. Downstream services validate tokens statelessly using a shared signing key via a custom `MicroserviceJWTAuthentication` class (avoids local database lookups for users).
 - **OTP**: 6-digit code, 5-minute TTL, stored in Redis, rate-limited to 5 req/min.
 - **Token Blacklisting**: Refresh tokens are blacklisted on logout via SimpleJWT's token blacklist app.
 - **Role-Based Access**: `admin` and `superadmin` roles enforced via DRF permission classes.
@@ -280,6 +299,10 @@ pharmtrack-microservices/
 │   │   ├── medicines/          ← Medicine inventory
 │   │   ├── vehicles/           ← Vehicles, Drivers, Customers
 │   │   └── audit/              ← Audit logs + permissions
+│   ├── consumers/
+│   │   └── delivery_consumer.py ← Subscribes delivery.* to deduct/restore stock
+│   ├── management/commands/
+│   │   └── run_delivery_consumer.py ← Starts gateway stock consumer
 │   └── utils/
 │       └── publisher.py        ← RabbitMQ event publisher
 │
@@ -293,7 +316,8 @@ pharmtrack-microservices/
 │   ├── events/
 │   │   └── publisher.py        ← Publishes delivery.* events
 │   ├── utils/
-│   │   └── qr_crypto.py        ← AES QR encryption/decryption
+│   │   ├── qr_crypto.py        ← AES QR encryption/decryption
+│   │   └── stock_client.py     ← Sync HTTP client for gateway stock checks
 │   └── management/commands/
 │       └── run_consumer.py     ← `python manage.py run_consumer`
 │

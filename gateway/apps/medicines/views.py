@@ -66,6 +66,8 @@ class MedicineDetailView(APIView):
                                 status=status.HTTP_404_NOT_FOUND)
             return Response(MedicineSerializer(med).data)
         except Exception as exc:
+            import traceback
+            traceback.print_exc()
             return Response({"message": str(exc)},
                             status=status.HTTP_400_BAD_REQUEST)
 
