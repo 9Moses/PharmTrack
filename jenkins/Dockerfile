@@ -26,6 +26,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-venv \
     gosu \
     jq \
+    wget \
     && rm -rf /var/lib/apt/lists/*
 
 # ── Docker CLI only (daemon lives in the separate dind container) ──────────
@@ -40,11 +41,17 @@ RUN curl -fsSL https://download.docker.com/linux/debian/gpg \
 # ── kubectl ───────────────────────────────────────────────────────────────
 # Pinned version instead of "stable.txt" — avoids silent breakage when
 # a new K8s release ships and changes client/server skew assumptions.
-ARG KUBECTL_VERSION=v1.29.4
-RUN curl -fsSLO "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl" \
-    && install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl \
-    && rm kubectl \
-    && kubectl version --client
+ARG KUBECTL_VERSION=v1.31.0
+RUN set -eux; \
+    wget -q -O /usr/local/bin/kubectl \
+        "https://storage.googleapis.com/kubernetes-release/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl"; \
+    wget -q -O /tmp/kubectl.sha256 \
+        "https://storage.googleapis.com/kubernetes-release/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl.sha256"; \
+    # Verify — build FAILS here if checksum doesn't match
+    EXPECTED=$(cat /tmp/kubectl.sha256); \
+    ACTUAL=$(sha256sum /usr/local/bin/kubectl | awk '{print $1}'); \
+    [ "$EXPECTED" = "$ACTUAL" ] || exit 1; \
+    chmod +x /usr/local/bin/kubectl
 
 # ── Helm (needed by Ansible roles that call `helm upgrade --install`) ───────
 ARG HELM_VERSION=v3.14.4

@@ -26,25 +26,30 @@ pipeline {
     }
 
     environment {
-        K8S_NAMESPACE       = "pharmtrack"
-        GATEWAY_IMAGE       = "9moses/gateway"
+        K8S_NAMESPACE          = "pharmtrack"
+        GATEWAY_IMAGE          = "9moses/gateway"
+        NOTIFICATION_IMAGE     = "9moses/notification-service"
+        EMAIL_IMAGE            = "9moses/email-service"
 
-        KUBECONFIG_CRED     = credentials('pharmtrack-kubeconfig')
-        DB_PASSWORD         = credentials('gateway-db-password')
-        REDIS_PASSWORD      = credentials('gateway-redis-password')
-        RABBITMQ_PASSWORD   = credentials('gateway-rabbitmq-password')
-        DJANGO_SECRET_KEY   = credentials('gateway-secret-key')
-        DOCKERHUB_CREDS     = credentials('dockerhub-credentials')
-        NOTIFY_EMAIL        = "esselmoses12@gmail.com"
-    }
+        KUBECONFIG_CRED        = credentials('pharmtrack-kubeconfig')
+        DB_PASSWORD            = credentials('gateway-db-password')
+        REDIS_PASSWORD         = credentials('gateway-redis-password')
+        RABBITMQ_PASSWORD      = credentials('gateway-rabbitmq-password')
+        DJANGO_SECRET_KEY      = credentials('gateway-secret-key')
+        NOTIFICATION_SECRET_KEY = credentials('notification-service-secret-key')
+        NOTIFICATION_DB_PASSWORD = credentials('notification-service-db-password')
+        NOTIFICATION_JWT_SECRET = credentials('notification-service-jwt-secret-key')
+        EMAIL_SMTP_USER        = credentials('email-service-smtp-user')
+        EMAIL_SMTP_PASSWORD    = credentials('email-service-smtp-password')
+        EMAIL_DEFAULT_FROM_EMAIL = "no-reply@pharmtrack.local"
+        EMAIL_DEFAULT_FROM_NAME = "PharmTrack Email Service"
+        EMAIL_SMTP_HOST        = "smtp.gmail.com"
+        EMAIL_SMTP_PORT        = "465"
+        EMAIL_SMTP_USE_SSL     = "true"
+     }
 
     stages {
-
-        // ─────────────────────────────────────────────────────────────────
-        // 0. Preflight — fail fast with a clear message instead of dying
-        //    20 minutes into the build on stage 6.
-        // ─────────────────────────────────────────────────────────────────
-        stage('Preflight') {
+        stage('Preflight Checks') {
             steps {
                 sh '''
                     echo "=== Preflight: checking required tools ==="
@@ -120,6 +125,13 @@ pipeline {
                                 echo "Validating $f ..."
                                 kubectl apply --dry-run=client -f "$f"
                             done
+
+                            for service_dir in notification-service email-service; do
+                                if [ -d "$service_dir/k8s/base" ]; then
+                                    echo "Validating $service_dir/k8s/base manifests..."
+                                    kubectl apply --dry-run=client -f "$service_dir/k8s/base"
+                                fi
+                            done
                         '''
                     }
                 }
@@ -149,6 +161,27 @@ pipeline {
                                 --from-literal=SECRET_KEY="${DJANGO_SECRET_KEY}" \
                                 -n ${K8S_NAMESPACE} --dry-run=client -o yaml | kubectl apply -f -
 
+                            kubectl create secret generic notification-service-secret \
+                                --from-literal=SECRET_KEY="${NOTIFICATION_SECRET_KEY}" \
+                                --from-literal=DB_NAME="notification_db" \
+                                --from-literal=DB_USER="postgres" \
+                                --from-literal=DB_PASSWORD="${NOTIFICATION_DB_PASSWORD}" \
+                                --from-literal=DB_HOST="postgres_notification.pharmtrack.svc.cluster.local" \
+                                --from-literal=DB_PORT="5432" \
+                                --from-literal=JWT_SECRET_KEY="${NOTIFICATION_JWT_SECRET}" \
+                                --from-literal=RABBITMQ_URL="amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@rabbitmq.pharmtrack.svc.cluster.local:5672/pharmtrack" \
+                                -n ${K8S_NAMESPACE} --dry-run=client -o yaml | kubectl apply -f -
+
+                            kubectl create secret generic email-service-secret \
+                                --from-literal=SMTP_HOST="${EMAIL_SMTP_HOST}" \
+                                --from-literal=SMTP_PORT="${EMAIL_SMTP_PORT}" \
+                                --from-literal=SMTP_USER="${EMAIL_SMTP_USER}" \
+                                --from-literal=SMTP_PASSWORD="${EMAIL_SMTP_PASSWORD}" \
+                                --from-literal=DEFAULT_FROM_EMAIL="${EMAIL_DEFAULT_FROM_EMAIL}" \
+                                --from-literal=DEFAULT_FROM_NAME="${EMAIL_DEFAULT_FROM_NAME}" \
+                                --from-literal=RABBITMQ_URL="amqp://${RABBITMQ_DEFAULT_USER}:${RABBITMQ_DEFAULT_PASS}@rabbitmq.pharmtrack.svc.cluster.local:5672/pharmtrack" \
+                                -n ${K8S_NAMESPACE} --dry-run=client -o yaml | kubectl apply -f -
+
                             # ── DockerHub image-pull secret ──────────────────────────────────────
                             # Use docker login → config.json method instead of --docker-password.
                             # Reason: --docker-password triggers a raw OAuth token fetch by the
@@ -171,6 +204,26 @@ pipeline {
                             [ -f k8s/infra/10-postgres-gateway.yaml ] && kubectl apply -f k8s/infra/10-postgres-gateway.yaml
                             [ -f k8s/infra/20-redis.yaml ]            && kubectl apply -f k8s/infra/20-redis.yaml
                             [ -f k8s/infra/30-rabbitmq.yaml ]         && kubectl apply -f k8s/infra/30-rabbitmq.yaml
+
+                            if [ -f notification-service/k8s/base/service.yaml ]; then
+                                echo "Applying notification-service service manifest"
+                                kubectl apply -f notification-service/k8s/base/service.yaml
+                            fi
+
+                            if [ -f notification-service/k8s/base/ingress.yaml ]; then
+                                echo "Applying notification-service ingress manifest"
+                                kubectl apply -f notification-service/k8s/base/ingress.yaml
+                            fi
+
+                            if [ -f email-service/k8s/base/service.yaml ]; then
+                                echo "Applying email-service service manifest"
+                                kubectl apply -f email-service/k8s/base/service.yaml
+                            fi
+
+                            if [ -f email-service/k8s/base/ingress.yaml ]; then
+                                echo "Applying email-service ingress manifest"
+                                kubectl apply -f email-service/k8s/base/ingress.yaml
+                            fi
                         '''
                     }
                 }
@@ -183,6 +236,21 @@ pipeline {
                             kubectl rollout status statefulset/postgres-gateway -n ${K8S_NAMESPACE} --timeout=180s || true
                             kubectl rollout status deployment/redis            -n ${K8S_NAMESPACE} --timeout=120s || true
                             kubectl rollout status statefulset/rabbitmq        -n ${K8S_NAMESPACE} --timeout=180s || true
+
+                            if kubectl get service notification-service -n ${K8S_NAMESPACE} >/dev/null 2>&1; then
+                                echo "notification-service Service exists"
+                            fi
+                            if kubectl get ingress notification-service -n ${K8S_NAMESPACE} >/dev/null 2>&1; then
+                                echo "notification-service Ingress exists"
+                            fi
+
+                            if kubectl get service email-service -n ${K8S_NAMESPACE} >/dev/null 2>&1; then
+                                echo "email-service Service exists"
+                            fi
+                            if kubectl get ingress email-service -n ${K8S_NAMESPACE} >/dev/null 2>&1; then
+                                echo "email-service Ingress exists"
+                            fi
+
                             echo "Infrastructure ready!"
                         '''
                     }
@@ -208,6 +276,44 @@ pipeline {
                                     --label "branch=${DETECTED_BRANCH}" \
                                     -t ${GATEWAY_IMAGE}:${IMAGE_TAG} \
                                     -t ${GATEWAY_IMAGE}:latest \
+                                    .
+                            """
+                        }
+                    }
+                }
+
+                stage('Notification Service') {
+                    when {
+                       expression { env.DETECTED_BRANCH in ['main', 'master'] }
+                    }
+                    steps {
+                        dir('notification-service') {
+                            sh """
+                                docker build \
+                                    --label "git.commit=${GIT_COMMIT_FULL}" \
+                                    --label "build.number=${BUILD_NUMBER}" \
+                                    --label "branch=${DETECTED_BRANCH}" \
+                                    -t ${NOTIFICATION_IMAGE}:${IMAGE_TAG} \
+                                    -t ${NOTIFICATION_IMAGE}:latest \
+                                    .
+                            """
+                        }
+                    }
+                }
+
+                stage('Email Service') {
+                    when {
+                       expression { env.DETECTED_BRANCH in ['main', 'master'] }
+                    }
+                    steps {
+                        dir('email-service') {
+                            sh """
+                                docker build \
+                                    --label "git.commit=${GIT_COMMIT_FULL}" \
+                                    --label "build.number=${BUILD_NUMBER}" \
+                                    --label "branch=${DETECTED_BRANCH}" \
+                                    -t ${EMAIL_IMAGE}:${IMAGE_TAG} \
+                                    -t ${EMAIL_IMAGE}:latest \
                                     .
                             """
                         }
@@ -268,6 +374,44 @@ pipeline {
                                     --exit-code 1 \
                                     --no-progress \
                                     ${GATEWAY_IMAGE}:${IMAGE_TAG}
+                            """
+                    }
+                }
+
+                stage('Notification - Image Scan (Trivy)') {
+                    when {
+                        expression { env.DETECTED_BRANCH in ['main', 'master'] }
+                    }
+                    steps {
+                        sh """
+                            docker run --rm \
+                                -v /var/run/docker.sock:/var/run/docker.sock \
+                                -v \$(pwd)/.trivy-cache:/root/.cache/ \
+                                aquasec/trivy:latest image \
+                                    --severity CRITICAL \
+                                    --ignore-unfixed \
+                                    --exit-code 1 \
+                                    --no-progress \
+                                    ${NOTIFICATION_IMAGE}:${IMAGE_TAG}
+                            """
+                    }
+                }
+
+                stage('Email - Image Scan (Trivy)') {
+                    when {
+                        expression { env.DETECTED_BRANCH in ['main', 'master'] }
+                    }
+                    steps {
+                        sh """
+                            docker run --rm \
+                                -v /var/run/docker.sock:/var/run/docker.sock \
+                                -v \$(pwd)/.trivy-cache:/root/.cache/ \
+                                aquasec/trivy:latest image \
+                                    --severity CRITICAL \
+                                    --ignore-unfixed \
+                                    --exit-code 1 \
+                                    --no-progress \
+                                    ${EMAIL_IMAGE}:${IMAGE_TAG}
                             """
                     }
                 }
@@ -350,6 +494,32 @@ pipeline {
                         }
                     }
                 }
+
+                stage('Notification Service - Unit Tests (pytest)') {
+                    when {
+                        expression { env.DETECTED_BRANCH in ['main', 'master'] }
+                    }
+                    steps {
+                        sh """
+                            docker run --rm \
+                                ${NOTIFICATION_IMAGE}:${IMAGE_TAG} \
+                                pytest tests/ --tb=short -v --maxfail=1 --disable-warnings
+                        """
+                    }
+                }
+
+                stage('Email Service - Unit Tests (pytest)') {
+                    when {
+                        expression { env.DETECTED_BRANCH in ['main', 'master'] }
+                    }
+                    steps {
+                        sh """
+                            docker run --rm \
+                                ${EMAIL_IMAGE}:${IMAGE_TAG} \
+                                pytest tests/ --tb=short -v --maxfail=1 --disable-warnings
+                        """
+                    }
+                }
             }
         }
 
@@ -365,6 +535,10 @@ pipeline {
                     echo \${DOCKERHUB_CREDS_PSW} | docker login -u \${DOCKERHUB_CREDS_USR} --password-stdin
                     docker push ${GATEWAY_IMAGE}:${IMAGE_TAG}
                     docker push ${GATEWAY_IMAGE}:latest
+                    docker push ${NOTIFICATION_IMAGE}:${IMAGE_TAG}
+                    docker push ${NOTIFICATION_IMAGE}:latest
+                    docker push ${EMAIL_IMAGE}:${IMAGE_TAG}
+                    docker push ${EMAIL_IMAGE}:latest
                 """
             }
         }
@@ -439,9 +613,25 @@ pipeline {
                         echo "=== Waiting for deployment rollout ==="
                         kubectl rollout status deployment/gateway -n ${K8S_NAMESPACE} --timeout=180s
 
+                        echo "=== Deploying notification-service and email-service manifests ==="
+                        for service_dir in notification-service email-service; do
+                            echo "=== Deploying ${service_dir} ==="
+                            oldpwd="$(pwd)"
+                            cd "${WORKSPACE}/${service_dir}/k8s/base"
+                            for manifest in deployment.yaml service.yaml ingress.yaml; do
+                                [ -f "$manifest" ] || continue
+                                sed "s#__IMAGE_TAG__#${IMAGE_TAG}#g" "$manifest" > "$manifest.rendered.yaml"
+                            done
+                            kubectl apply -f *.rendered.yaml
+                            kubectl rollout status deployment/${service_dir} -n ${K8S_NAMESPACE} --timeout=180s
+                            cd "$oldpwd"
+                        done
+
                         echo "🎉 Deployment completed successfully!"
 
                         # Cleanup
+                        find "${WORKSPACE}/notification-service/k8s/base" -name '*.rendered.yaml' -delete || true
+                        find "${WORKSPACE}/email-service/k8s/base" -name '*.rendered.yaml' -delete || true
                         rm -f *.rendered.yaml
                     """
                 }
@@ -458,17 +648,32 @@ pipeline {
             steps {
                 sh """
                     export KUBECONFIG=\${KUBECONFIG_CRED}
+                    echo "=== Smoke checking gateway ==="
                     kubectl run gateway-smoke-${BUILD_NUMBER} \
                         -n ${K8S_NAMESPACE} --rm -i --restart=Never \
                         --image=curlimages/curl:8.7.1 \
                         -- curl -sf --retry 5 --retry-delay 3 \
                              http://gateway.${K8S_NAMESPACE}.svc.cluster.local:8000/healthz/
+
+                    echo "=== Smoke checking notification-service ==="
+                    kubectl run notification-smoke-${BUILD_NUMBER} \
+                        -n ${K8S_NAMESPACE} --rm -i --restart=Never \
+                        --image=curlimages/curl:8.7.1 \
+                        -- curl -sf --retry 5 --retry-delay 3 \
+                             http://notification-service.${K8S_NAMESPACE}.svc.cluster.local:8002/api/docs/
+
+                    echo "=== Smoke checking email-service ==="
+                    kubectl run email-smoke-${BUILD_NUMBER} \
+                        -n ${K8S_NAMESPACE} --rm -i --restart=Never \
+                        --image=curlimages/curl:8.7.1 \
+                        -- curl -sf --retry 5 --retry-delay 3 \
+                             http://email-service.${K8S_NAMESPACE}.svc.cluster.local:8003/health
                 """
             }
         }
     }
 
-    // ─────────────────────────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────────────POST
     post {
         always {
             script {
@@ -477,6 +682,10 @@ pipeline {
                     docker logout 2>/dev/null || true
                     docker rmi ${env.GATEWAY_IMAGE}:${env.IMAGE_TAG} 2>/dev/null || true
                     docker rmi ${env.GATEWAY_IMAGE}:latest 2>/dev/null || true
+                    docker rmi ${env.NOTIFICATION_IMAGE}:${env.IMAGE_TAG} 2>/dev/null || true
+                    docker rmi ${env.NOTIFICATION_IMAGE}:latest 2>/dev/null || true
+                    docker rmi ${env.EMAIL_IMAGE}:${env.IMAGE_TAG} 2>/dev/null || true
+                    docker rmi ${env.EMAIL_IMAGE}:latest 2>/dev/null || true
                 """
             }
         }

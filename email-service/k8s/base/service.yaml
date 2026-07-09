@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: email-service
+  namespace: pharmtrack
+  labels:
+    app: email-service
+spec:
+  selector:
+    app: email-service
+  ports:
+    - port: 8003
+      targetPort: 8003
+      name: http
+  type: ClusterIP
