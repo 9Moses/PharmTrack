@@ -32,6 +32,7 @@ pipeline {
         EMAIL_IMAGE            = "9moses/email-service"
 
         KUBECONFIG_CRED        = credentials('pharmtrack-kubeconfig')
+        DOCKERHUB_CREDS        = credentials('dockerhub-credentials')
         DB_PASSWORD            = credentials('gateway-db-password')
         REDIS_PASSWORD         = credentials('gateway-redis-password')
         RABBITMQ_PASSWORD      = credentials('gateway-rabbitmq-password')
