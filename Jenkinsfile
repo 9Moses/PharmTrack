@@ -678,25 +678,29 @@ pipeline {
         always {
             script {
                 echo "Pipeline completed: ${currentBuild.result}"
-                sh """
-                    docker logout 2>/dev/null || true
-                    docker rmi ${env.GATEWAY_IMAGE}:${env.IMAGE_TAG} 2>/dev/null || true
-                    docker rmi ${env.GATEWAY_IMAGE}:latest 2>/dev/null || true
-                    docker rmi ${env.NOTIFICATION_IMAGE}:${env.IMAGE_TAG} 2>/dev/null || true
-                    docker rmi ${env.NOTIFICATION_IMAGE}:latest 2>/dev/null || true
-                    docker rmi ${env.EMAIL_IMAGE}:${env.IMAGE_TAG} 2>/dev/null || true
-                    docker rmi ${env.EMAIL_IMAGE}:latest 2>/dev/null || true
-                """
+                node {
+                    sh """
+                        docker logout 2>/dev/null || true
+                        docker rmi ${env.GATEWAY_IMAGE}:${env.IMAGE_TAG} 2>/dev/null || true
+                        docker rmi ${env.GATEWAY_IMAGE}:latest 2>/dev/null || true
+                        docker rmi ${env.NOTIFICATION_IMAGE}:${env.IMAGE_TAG} 2>/dev/null || true
+                        docker rmi ${env.NOTIFICATION_IMAGE}:latest 2>/dev/null || true
+                        docker rmi ${env.EMAIL_IMAGE}:${env.IMAGE_TAG} 2>/dev/null || true
+                        docker rmi ${env.EMAIL_IMAGE}:latest 2>/dev/null || true
+                    """
+                }
             }
         }
         failure {
             script {
                 if (env.PREVIOUS_REVISION && env.PREVIOUS_REVISION != '0') {
-                    sh """
-                        export KUBECONFIG=\${KUBECONFIG_CRED}
-                        echo "⚠️  Rolling back to revision ${env.PREVIOUS_REVISION}"
-                        kubectl rollout undo deployment/gateway -n ${K8S_NAMESPACE} --to-revision=${env.PREVIOUS_REVISION} || true
-                    """
+                    node {
+                        sh """
+                            export KUBECONFIG=\${KUBECONFIG_CRED}
+                            echo "⚠️  Rolling back to revision ${env.PREVIOUS_REVISION}"
+                            kubectl rollout undo deployment/gateway -n ${K8S_NAMESPACE} --to-revision=${env.PREVIOUS_REVISION} || true
+                        """
+                    }
                 }
             }
         }
