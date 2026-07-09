@@ -1,12 +1,26 @@
 #!/bin/bash
 set -e
 
-# Dynamically match the docker group GID to the mounted socket's GID.
-# This is needed because Docker Desktop on Windows/Linux may use a different GID
-# than the 999 baked into the image at build time.
-if [ -S /var/run/docker.sock ]; then
+# ── Docker connectivity setup ──────────────────────────────────────────────
+# Two modes are supported:
+#
+#   Mode A — Unix socket (Docker Desktop / rootful Docker on Linux)
+#             DOCKER_HOST is unset or set to unix:///var/run/docker.sock
+#             The socket is bind-mounted at /var/run/docker.sock
+#
+#   Mode B — TCP + TLS (Docker-in-Docker)
+#             DOCKER_HOST=tcp://dind:2376
+#             DOCKER_TLS_VERIFY=1
+#             DOCKER_CERT_PATH=/certs/client   (volume-mounted from dind)
+#
+# In Mode B there is no socket to fix up, so we skip that block entirely.
+
+if [ -n "${DOCKER_HOST:-}" ] && echo "${DOCKER_HOST}" | grep -q "^tcp://"; then
+    echo "[entrypoint] TCP/TLS mode detected (DOCKER_HOST=${DOCKER_HOST})"
+    echo "[entrypoint] Skipping socket GID fixup — using DinD over TLS."
+elif [ -S /var/run/docker.sock ]; then
     SOCK_GID=$(stat -c '%g' /var/run/docker.sock)
-    echo "[entrypoint] Docker socket GID on host: ${SOCK_GID}"
+    echo "[entrypoint] Unix socket mode — Docker socket GID on host: ${SOCK_GID}"
 
     # Reassign the docker group to the socket's actual GID
     if getent group docker > /dev/null 2>&1; then
@@ -22,7 +36,8 @@ if [ -S /var/run/docker.sock ]; then
     chmod 660 /var/run/docker.sock || true
     chown root:docker /var/run/docker.sock || true
 else
-    echo "[entrypoint] WARNING: /var/run/docker.sock not found — Docker builds will fail."
+    echo "[entrypoint] WARNING: No Docker socket found and DOCKER_HOST is not a TCP address."
+    echo "[entrypoint] Docker builds will fail unless DOCKER_HOST is set correctly."
 fi
 
 # Hand off to the official Jenkins entrypoint as the jenkins user
