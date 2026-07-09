@@ -129,7 +129,7 @@ pipeline {
                             for service_dir in notification-service email-service; do
                                 if [ -d "$service_dir/k8s/base" ]; then
                                     echo "Validating $service_dir/k8s/base manifests..."
-                                    kubectl apply --dry-run=client -f "$service_dir/k8s/base"
+                                    kubectl apply --dry-run=client -k "$service_dir/k8s/base"
                                 fi
                             done
                         '''
