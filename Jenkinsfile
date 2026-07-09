@@ -615,16 +615,16 @@ pipeline {
 
                         echo "=== Deploying notification-service and email-service manifests ==="
                         for service_dir in notification-service email-service; do
-                            echo "=== Deploying ${service_dir} ==="
-                            oldpwd="$(pwd)"
-                            cd "${WORKSPACE}/${service_dir}/k8s/base"
+                            echo "=== Deploying \${service_dir} ==="
+                            oldpwd="\$(pwd)"
+                            cd "${WORKSPACE}/\${service_dir}/k8s/base"
                             for manifest in deployment.yaml service.yaml ingress.yaml; do
-                                [ -f "$manifest" ] || continue
-                                sed "s#__IMAGE_TAG__#${IMAGE_TAG}#g" "$manifest" > "$manifest.rendered.yaml"
+                                [ -f "\$manifest" ] || continue
+                                sed "s#__IMAGE_TAG__#${IMAGE_TAG}#g" "\$manifest" > "\$manifest.rendered.yaml"
                             done
                             kubectl apply -f *.rendered.yaml
-                            kubectl rollout status deployment/${service_dir} -n ${K8S_NAMESPACE} --timeout=180s
-                            cd "$oldpwd"
+                            kubectl rollout status deployment/\${service_dir} -n ${K8S_NAMESPACE} --timeout=180s
+                            cd "\$oldpwd"
                         done
 
                         echo "🎉 Deployment completed successfully!"
