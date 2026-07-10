@@ -334,12 +334,14 @@ pipeline {
                     }
                     steps {
                         dir('gateway') {
-                            sh """
-                                docker run --rm \
-                                    -e SECRET_KEY=ci-lint-key -e DEBUG=True -e DB_PASSWORD=ci \
-                                    ${GATEWAY_IMAGE}:${IMAGE_TAG} \
-                                    flake8 . --max-line-length=120 --exclude=migrations,__pycache__,.venv --format=default
-                            """
+                            retry(3) {
+                                sh """
+                                    docker run --rm \
+                                        -e SECRET_KEY=ci-lint-key -e DEBUG=True -e DB_PASSWORD=ci \
+                                        ${GATEWAY_IMAGE}:${IMAGE_TAG} \
+                                        flake8 . --max-line-length=120 --exclude=migrations,__pycache__,.venv --format=default
+                                """
+                            }
                         }
                     }
                 }
@@ -350,12 +352,14 @@ pipeline {
                     }
                     steps {
                         dir('gateway') {
-                            sh """
-                                docker run --rm \
-                                    -e SECRET_KEY=ci-bandit-key -e DEBUG=True -e DB_PASSWORD=ci \
-                                    ${GATEWAY_IMAGE}:${IMAGE_TAG} \
-                                    bandit -r . --exclude ./.venv,./migrations -ll -f txt
-                            """
+                            retry(3) {
+                                sh """
+                                    docker run --rm \
+                                        -e SECRET_KEY=ci-bandit-key -e DEBUG=True -e DB_PASSWORD=ci \
+                                        ${GATEWAY_IMAGE}:${IMAGE_TAG} \
+                                        bandit -r . --exclude ./.venv,./migrations -ll -f txt
+                                """
+                            }
                         }
                     }
                 }
@@ -365,18 +369,20 @@ pipeline {
                         expression { env.DETECTED_BRANCH in ['main', 'master'] }
                     }
                     steps {
-                        sh """
-                            docker run --rm \
-                                -v /var/run/docker.sock:/var/run/docker.sock \
-                                -v \$(pwd)/.trivy-cache-gateway:/root/.cache/ \
-                                aquasec/trivy:latest image \
-                                    --timeout 15m \
-                                    --severity CRITICAL \
-                                    --ignore-unfixed \
-                                    --exit-code 1 \
-                                    --no-progress \
-                                    ${GATEWAY_IMAGE}:${IMAGE_TAG}
-                            """
+                        retry(3) {
+                            sh """
+                                docker run --rm \
+                                    -v /var/run/docker.sock:/var/run/docker.sock \
+                                    -v \$(pwd)/.trivy-cache-gateway:/root/.cache/ \
+                                    aquasec/trivy:latest image \
+                                        --timeout 15m \
+                                        --severity CRITICAL \
+                                        --ignore-unfixed \
+                                        --exit-code 1 \
+                                        --no-progress \
+                                        ${GATEWAY_IMAGE}:${IMAGE_TAG}
+                                """
+                        }
                     }
                 }
 
@@ -385,18 +391,20 @@ pipeline {
                         expression { env.DETECTED_BRANCH in ['main', 'master'] }
                     }
                     steps {
-                        sh """
-                            docker run --rm \
-                                -v /var/run/docker.sock:/var/run/docker.sock \
-                                -v \$(pwd)/.trivy-cache-notification:/root/.cache/ \
-                                aquasec/trivy:latest image \
-                                    --timeout 15m \
-                                    --severity CRITICAL \
-                                    --ignore-unfixed \
-                                    --exit-code 1 \
-                                    --no-progress \
-                                    ${NOTIFICATION_IMAGE}:${IMAGE_TAG}
-                            """
+                        retry(3) {
+                            sh """
+                                docker run --rm \
+                                    -v /var/run/docker.sock:/var/run/docker.sock \
+                                    -v \$(pwd)/.trivy-cache-notification:/root/.cache/ \
+                                    aquasec/trivy:latest image \
+                                        --timeout 15m \
+                                        --severity CRITICAL \
+                                        --ignore-unfixed \
+                                        --exit-code 1 \
+                                        --no-progress \
+                                        ${NOTIFICATION_IMAGE}:${IMAGE_TAG}
+                                """
+                        }
                     }
                 }
 
@@ -405,18 +413,20 @@ pipeline {
                         expression { env.DETECTED_BRANCH in ['main', 'master'] }
                     }
                     steps {
-                        sh """
-                            docker run --rm \
-                                -v /var/run/docker.sock:/var/run/docker.sock \
-                                -v \$(pwd)/.trivy-cache-email:/root/.cache/ \
-                                aquasec/trivy:latest image \
-                                    --timeout 15m \
-                                    --severity CRITICAL \
-                                    --ignore-unfixed \
-                                    --exit-code 1 \
-                                    --no-progress \
-                                    ${EMAIL_IMAGE}:${IMAGE_TAG}
-                            """
+                        retry(3) {
+                            sh """
+                                docker run --rm \
+                                    -v /var/run/docker.sock:/var/run/docker.sock \
+                                    -v \$(pwd)/.trivy-cache-email:/root/.cache/ \
+                                    aquasec/trivy:latest image \
+                                        --timeout 15m \
+                                        --severity CRITICAL \
+                                        --ignore-unfixed \
+                                        --exit-code 1 \
+                                        --no-progress \
+                                        ${EMAIL_IMAGE}:${IMAGE_TAG}
+                                """
+                        }
                     }
                 }
             }
