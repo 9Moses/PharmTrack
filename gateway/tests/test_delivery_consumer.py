@@ -41,4 +41,3 @@ def test_process_delivery_event_cancelled(mock_restore):
 def test_process_delivery_event_unknown():
     # Just to cover the else branch
     process_delivery_event("delivery.unknown", {"event": "delivery.unknown"})
-
