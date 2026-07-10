@@ -506,6 +506,10 @@ pipeline {
                     steps {
                         sh """
                             docker run --rm \
+                                -e SECRET_KEY=ci-test-secret \
+                                -e DB_PASSWORD=ci_pass \
+                                -e JWT_SECRET_KEY=ci-jwt-secret \
+                                -e RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/ \
                                 ${NOTIFICATION_IMAGE}:${IMAGE_TAG} \
                                 pytest tests/ --tb=short -v --maxfail=1 --disable-warnings
                         """
