@@ -4,6 +4,7 @@ from consumers.delivery_consumer import start_consumer
 
 logger = logging.getLogger(__name__)
 
+
 class Command(BaseCommand):
     help = "Starts the RabbitMQ consumer for delivery events to adjust medicine stock."
 

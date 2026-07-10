@@ -8,19 +8,20 @@ Uses SELECT ... FOR UPDATE to avoid race conditions.
 """
 import json
 import logging
-import django
 import os
+import django
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "pharmtrack_gateway.settings")
 django.setup()
 
-import pika
-from django.conf import settings
-from django.db import transaction
-from apps.medicines.models import Medicine
-from utils.publisher import publish_event
+import pika  # noqa: E402
+from django.conf import settings  # noqa: E402
+from django.db import transaction  # noqa: E402
+from apps.medicines.models import Medicine  # noqa: E402
+from utils.publisher import publish_event  # noqa: E402
 
 logger = logging.getLogger(__name__)
+
 
 def process_delivery_event(routing_key: str, payload: dict) -> None:
     event = payload.get("event", routing_key)
@@ -48,7 +49,7 @@ def _deduct_stock(items: list) -> None:
                     medicine.quantity -= quantity
                     medicine.save(update_fields=["quantity", "updated_at"])
                     logger.info("[Delivery Consumer] Deducted %s from medicine %s", quantity, medicine_id)
-                    
+
                     # Publish event for stock update
                     publish_event("pharmtrack.medicine", "medicine.updated", {
                         "event": "medicine.updated",
@@ -79,7 +80,7 @@ def _restore_stock(items: list) -> None:
                 medicine.quantity += quantity
                 medicine.save(update_fields=["quantity", "updated_at"])
                 logger.info("[Delivery Consumer] Restored %s to medicine %s", quantity, medicine_id)
-                
+
                 # Publish event for stock update
                 publish_event("pharmtrack.medicine", "medicine.updated", {
                     "event": "medicine.updated",

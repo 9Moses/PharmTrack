@@ -368,7 +368,7 @@ pipeline {
                         sh """
                             docker run --rm \
                                 -v /var/run/docker.sock:/var/run/docker.sock \
-                                -v \$(pwd)/.trivy-cache:/root/.cache/ \
+                                -v \$(pwd)/.trivy-cache-gateway:/root/.cache/ \
                                 aquasec/trivy:latest image \
                                     --severity CRITICAL \
                                     --ignore-unfixed \
@@ -387,7 +387,7 @@ pipeline {
                         sh """
                             docker run --rm \
                                 -v /var/run/docker.sock:/var/run/docker.sock \
-                                -v \$(pwd)/.trivy-cache:/root/.cache/ \
+                                -v \$(pwd)/.trivy-cache-notification:/root/.cache/ \
                                 aquasec/trivy:latest image \
                                     --severity CRITICAL \
                                     --ignore-unfixed \
@@ -406,7 +406,7 @@ pipeline {
                         sh """
                             docker run --rm \
                                 -v /var/run/docker.sock:/var/run/docker.sock \
-                                -v \$(pwd)/.trivy-cache:/root/.cache/ \
+                                -v \$(pwd)/.trivy-cache-email:/root/.cache/ \
                                 aquasec/trivy:latest image \
                                     --severity CRITICAL \
                                     --ignore-unfixed \
