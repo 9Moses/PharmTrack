@@ -515,14 +515,47 @@ pipeline {
                     }
                     steps {
                         sh """
+                            echo "Cleaning old containers/networks..."
+                            docker rm -f ci-postgres-notif || true
+                            docker network rm ci-net-notif || true
+
+                            echo "Creating CI network..."
+                            docker network create ci-net-notif || true
+
+                            echo "Starting PostgreSQL..."
+                            docker run -d --name ci-postgres-notif \
+                            --network ci-net-notif \
+                            -e POSTGRES_DB=notification_db \
+                            -e POSTGRES_USER=postgres \
+                            -e POSTGRES_PASSWORD=ci_pass \
+                            postgres:15
+
+                            echo "Waiting for DB to be ready..."
+                            sleep 10
+
+                            echo "Running Django tests..."
                             docker run --rm \
+                                --network ci-net-notif \
                                 -e SECRET_KEY=ci-test-secret \
+                                -e DB_NAME=notification_db \
+                                -e DB_USER=postgres \
                                 -e DB_PASSWORD=ci_pass \
+                                -e DB_HOST=ci-postgres-notif \
+                                -e DB_PORT=5432 \
                                 -e JWT_SECRET_KEY=ci-jwt-secret \
                                 -e RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/ \
                                 ${NOTIFICATION_IMAGE}:${IMAGE_TAG} \
                                 pytest tests/ --tb=short -v --maxfail=1 --disable-warnings
                         """
+                    }
+                    post {
+                        cleanup {
+                            sh """
+                                echo "Cleaning up CI containers..."
+                                docker rm -f ci-postgres-notif || true
+                                docker network rm ci-net-notif || true
+                            """
+                        }
                     }
                 }
 
