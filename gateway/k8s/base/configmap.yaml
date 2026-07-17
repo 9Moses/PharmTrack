@@ -10,6 +10,10 @@ data:
   DB_USER: "postgres"
   DB_HOST: "postgres-gateway.pharmtrack.svc.cluster.local"
   DB_PORT: "5432"
-  REDIS_URL: "redis://:$(REDIS_PASSWORD)@redis.pharmtrack.svc.cluster.local:6379/0"
+  # REDIS_URL is assembled at runtime in the Pod env: block (see deployment.yaml)
+  # so that $(REDIS_PASSWORD) is expanded from redis-secret, not here.
+  REDIS_HOST: "redis.pharmtrack.svc.cluster.local"
+  REDIS_PORT: "6379"
+  REDIS_DB: "0"
   RABBITMQ_HOST: "rabbitmq.pharmtrack.svc.cluster.local"
   RABBITMQ_VHOST: "pharmtrack"

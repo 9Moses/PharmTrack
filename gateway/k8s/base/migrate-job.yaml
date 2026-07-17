@@ -27,6 +27,9 @@ spec:
                 secretKeyRef:
                   name: gateway-db-secret
                   key: POSTGRES_USER
+            # $(VAR) expansion works in Pod env: blocks — REDIS_PASSWORD comes from envFrom redis-secret below.
+            - name: REDIS_URL
+              value: "redis://:$(REDIS_PASSWORD)@redis.pharmtrack.svc.cluster.local:6379/0"
             # Build the full AMQP URL from the rabbitmq-secret vars (injected via envFrom below).
             # Kubernetes expands $(VAR) in env entries after all envFrom sources are loaded.
             - name: RABBITMQ_URL

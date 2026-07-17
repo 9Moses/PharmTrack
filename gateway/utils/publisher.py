@@ -6,16 +6,21 @@ Exchange topology:
   pharmtrack.auth      (fanout) — auth events
   pharmtrack.delivery  (topic)  — delivery.* events
   pharmtrack.medicine  (topic)  — medicine.* events
+
+NOTE: pika is imported lazily (inside functions, not at module level) to avoid
+the socket.getfqdn() reverse-DNS call pika makes at import time. In containers
+without a fast DNS resolver this blocks for ~30 seconds and prevents gunicorn
+workers from starting, causing readiness probes to fail.
 """
 import json
 import logging
-import pika
 from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
 
-def _get_connection() -> pika.BlockingConnection:
+def _get_connection():
+    import pika  # lazy import — avoids 30s DNS hang at module load time
     params = pika.URLParameters(settings.RABBITMQ_URL)
     params.heartbeat = 600
     params.blocked_connection_timeout = 300
@@ -28,6 +33,7 @@ def publish_event(exchange: str, routing_key: str, payload: dict) -> None:
     Uses a short-lived connection per publish (suitable for Django views).
     For high-throughput, replace with a connection pool or Celery broker.
     """
+    import pika  # lazy import — avoids 30s DNS hang at module load time
     try:
         connection = _get_connection()
         channel = connection.channel()
@@ -49,3 +55,4 @@ def publish_event(exchange: str, routing_key: str, payload: dict) -> None:
     except Exception as exc:
         logger.error("Failed to publish event '%s': %s", routing_key, exc)
         raise
+

@@ -43,16 +43,18 @@ spec:
             httpGet:
               path: /healthz/
               port: 8000
-            initialDelaySeconds: 10
+            initialDelaySeconds: 20
             periodSeconds: 10
-            timeoutSeconds: 3
+            timeoutSeconds: 5
+            failureThreshold: 6
           livenessProbe:
             httpGet:
               path: /healthz/
               port: 8000
-            initialDelaySeconds: 20
+            initialDelaySeconds: 40
             periodSeconds: 20
-            timeoutSeconds: 3
+            timeoutSeconds: 5
+            failureThreshold: 3
           resources:
             requests:
               cpu: "100m"
@@ -71,6 +73,10 @@ spec:
                 secretKeyRef:
                   name: gateway-db-secret
                   key: POSTGRES_USER
+            # Compose REDIS_URL from REDIS_PASSWORD injected via envFrom (redis-secret).
+            # $(VAR) expansion works here in Pod env: blocks, unlike in ConfigMap data.
+            - name: REDIS_URL
+              value: "redis://:$(REDIS_PASSWORD)@redis.pharmtrack.svc.cluster.local:6379/0"
             # Compose the full AMQP URL from rabbitmq-secret vars (loaded via envFrom).
             - name: RABBITMQ_URL
               value: "amqp://$(RABBITMQ_DEFAULT_USER):$(RABBITMQ_DEFAULT_PASS)@rabbitmq.pharmtrack.svc.cluster.local:5672/pharmtrack"
