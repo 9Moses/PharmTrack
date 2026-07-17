@@ -605,7 +605,7 @@ pipeline {
                 script {
                     env.PREVIOUS_REVISION = sh(
                         script: """
-                            export KUBECONFIG=${KUBECONFIG_CRED}
+                            export KUBECONFIG=\${KUBECONFIG_CRED}
                             kubectl get deployment gateway -n ${K8S_NAMESPACE} \
                                 -o jsonpath='{.metadata.annotations.deployment\\.kubernetes\\.io/revision}' 2>/dev/null || echo '0'
                         """,
@@ -617,7 +617,7 @@ pipeline {
                 dir('gateway/k8s/base') {
                     sh """
                         set -e  # Exit immediately if any command fails
-                        export KUBECONFIG=${KUBECONFIG_CRED}
+                        export KUBECONFIG=\${KUBECONFIG_CRED}
 
                         echo "=== Applying base configurations first ==="
                         kubectl apply -f configmap.yaml
