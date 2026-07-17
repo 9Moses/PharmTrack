@@ -55,4 +55,3 @@ def publish_event(exchange: str, routing_key: str, payload: dict) -> None:
     except Exception as exc:
         logger.error("Failed to publish event '%s': %s", routing_key, exc)
         raise
-
