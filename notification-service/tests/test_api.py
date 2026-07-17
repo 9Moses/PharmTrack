@@ -11,7 +11,7 @@ def client():
 def test_docs_endpoint_available(client):
     response = client.get("/api/docs/")
     assert response.status_code == 200
-    assert b"Swagger UI" in response.content
+    assert b"swagger-ui" in response.content  # drf-spectacular uses custom title; check div id
 
 
 def test_notifications_requires_auth(client):
