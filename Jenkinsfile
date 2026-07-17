@@ -672,8 +672,8 @@ pipeline {
                             for manifest in deployment.yaml service.yaml ingress.yaml; do
                                 [ -f "\$manifest" ] || continue
                                 sed "s#__IMAGE_TAG__#${IMAGE_TAG}#g" "\$manifest" > "\$manifest.rendered.yaml"
+                                kubectl apply -f "\$manifest.rendered.yaml"
                             done
-                            kubectl apply -f *.rendered.yaml
                             kubectl rollout status deployment/\${service_dir} -n ${K8S_NAMESPACE} --timeout=180s
                             cd "\$oldpwd"
                         done
